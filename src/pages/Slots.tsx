@@ -4,11 +4,14 @@ import {
   collection, 
   doc, 
   getDoc, 
+  getDocs,
   query, 
   where, 
   onSnapshot, 
   addDoc, 
-  updateDoc 
+  updateDoc,
+  writeBatch,
+  serverTimestamp
 } from 'firebase/firestore';
 import { auth, db } from '@/firebase/config';
 import { useToast } from '@/hooks/use-toast';
@@ -70,8 +73,154 @@ const Slots = () => {
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
 
+  // Function to check and release expired bookings
+  const checkAndReleaseExpiredSlots = async () => {
+    try {
+      // Get current time in UTC
+      const now = new Date();
+      console.log('Checking for expired slots at:', now.toISOString());
+      
+      const bookingsRef = collection(db, 'bookings');
+      const q = query(
+        bookingsRef,
+        where('status', '==', 'confirmed')
+      );
+      
+      const querySnapshot = await getDocs(q);
+      const batch = writeBatch(db);
+      let updates = 0;
+      
+      console.log(`Found ${querySnapshot.size} confirmed bookings to check`);
+
+      querySnapshot.forEach((bookingDoc) => {
+        const booking = bookingDoc.data() as {
+          slotId?: string;
+          endTimestamp?: { toDate: () => Date };
+          status: string;
+        };
+        
+        const endTime = booking.endTimestamp?.toDate();
+        
+        console.log('Checking booking:', {
+          id: bookingDoc.id,
+          slotId: booking.slotId,
+          endTime: endTime?.toISOString(),
+          isExpired: endTime ? endTime <= now : false
+        });
+        
+        if (booking.slotId && endTime && endTime <= now) {
+          console.log(`Releasing slot ${booking.slotId} from booking ${bookingDoc.id}`);
+          
+          // Update booking status to completed
+          batch.update(bookingDoc.ref, { 
+            status: 'completed',
+            updatedAt: serverTimestamp()
+          });
+          
+          // Update slot status to available
+          const slotRef = doc(db, 'slots', booking.slotId);
+          batch.update(slotRef, { 
+            status: 'available',
+            updatedAt: serverTimestamp()
+          });
+          
+          updates++;
+        }
+      });
+
+      if (updates > 0) {
+        await batch.commit();
+        console.log(`Released ${updates} expired slots`);
+        // Refresh the slots after update
+        fetchSlots();
+      }
+    } catch (error) {
+      console.error('Error releasing expired slots:', error);
+    }
+  };
+
+  // Function to schedule next check for the nearest booking
+  const scheduleNextCheck = (bookings: any[]) => {
+    console.log('Scheduling next check...');
+    if (bookings.length === 0) return;
+    
+    // Find the booking that will expire next
+    const now = new Date();
+    const upcomingBookings = bookings
+      .filter(booking => 
+        booking.status === 'confirmed' && 
+        booking.endTimestamp && 
+        booking.endTimestamp.toDate() > now
+      )
+      .sort((a, b) => a.endTimestamp.toMillis() - b.endTimestamp.toMillis());
+    
+    if (upcomingBookings.length === 0) return;
+    
+    const nextBooking = upcomingBookings[0];
+    const timeUntilNextBooking = nextBooking.endTimestamp.toDate().getTime() - now.getTime();
+    
+    // Only set timeout if the booking is in the future
+    if (timeUntilNextBooking > 0) {
+      console.log(`Next slot will be released at: ${nextBooking.endTimestamp.toDate()}`);
+      setTimeout(() => {
+        checkAndReleaseExpiredSlots();
+      }, timeUntilNextBooking + 1000); // Add 1 second buffer
+    }
+  };
+
+  // Function to fetch and process slots
+  const fetchSlots = async () => {
+    if (!locationId) return;
+    
+    try {
+      const slotsQuery = query(
+        collection(db, 'slots'),
+        where('locationId', '==', locationId)
+      );
+      
+      const querySnapshot = await getDocs(slotsQuery);
+      const slotsData = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Slot[];
+      
+      setSlots(slotsData);
+      return slotsData;
+    } catch (error) {
+      console.error('Error fetching slots:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load parking slots.',
+        variant: 'destructive',
+      });
+      return [];
+    }
+  };
+
   useEffect(() => {
     if (!locationId) return;
+
+    // Check for expired slots when component mounts
+    checkAndReleaseExpiredSlots();
+  
+    // Set up a timer to check every minute
+    const checkInterval = setInterval(checkAndReleaseExpiredSlots, 60 * 1000);
+    
+    // Set up a real-time listener for bookings
+    const bookingsQuery = query(
+      collection(db, 'bookings'),
+      where('status', '==', 'confirmed')
+    );
+    
+    const unsubscribe = onSnapshot(bookingsQuery, async (snapshot) => {
+      const bookings = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      
+      // Schedule next check based on the earliest ending booking
+      scheduleNextCheck(bookings);
+    });
 
     const fetchLocation = async () => {
       try {
@@ -147,7 +296,13 @@ const Slots = () => {
     );
 
     fetchLocation();
-    return () => unsubscribeSlots();
+    
+    // Clean up on unmount
+    return () => {
+      clearInterval(checkInterval);
+      unsubscribe();
+      unsubscribeSlots();
+    };
   }, [locationId, toast]);
 
   const handleSlotSelect = (slotId: string) => {
@@ -186,6 +341,11 @@ const Slots = () => {
     if (!selectedSlotData) return;
 
     try {
+      // Parse the date and time for the booking
+      const [year, month, day] = bookingDate.split('-').map(Number);
+      const [startHours, startMinutes] = startTime.split(':').map(Number);
+      const [endHours, endMinutes] = endTime.split(':').map(Number);
+      
       // Create booking document
       const bookingData = {
         slotId: selectedSlot,
@@ -197,6 +357,8 @@ const Slots = () => {
         date: bookingDate,
         startTime,
         endTime,
+        startTimestamp: new Date(year, month - 1, day, startHours, startMinutes),
+        endTimestamp: new Date(year, month - 1, day, endHours, endMinutes),
         pricePerHour: selectedSlotData.pricePerHour,
         totalPrice: calculateTotalPrice(selectedSlotData.pricePerHour, startTime, endTime),
         status: 'confirmed',
