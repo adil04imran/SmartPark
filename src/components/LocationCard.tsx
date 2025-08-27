@@ -3,26 +3,32 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
+export interface LocationCardLocation {
+  id: string;
+  name: string;
+  address: string;
+  total_slots: number;
+  available_slots: number;
+  pricing_per_hour: number;
+  distance?: string;
+  amenities?: string[];
+}
+
 interface LocationCardProps {
-  location: {
-    id: number;
-    name: string;
-    address: string;
-    distance: string;
-    totalSlots: number;
-    availableSlots: number;
-    pricePerHour: number;
-    amenities: string[];
-  };
-  onSelect: (locationId: number) => void;
+  location: LocationCardLocation;
+  onSelect: (locationId: string) => void;
 }
 
 const LocationCard = ({ location, onSelect }: LocationCardProps) => {
   const availabilityStatus = () => {
-    const percentage = (location.availableSlots / location.totalSlots) * 100;
-    if (percentage > 30) return { status: 'available', color: 'status-available' };
-    if (percentage > 10) return { status: 'limited', color: 'status-limited' };
-    return { status: 'full', color: 'status-booked' };
+    // Ensure we don't divide by zero
+    const totalSlots = location.total_slots || 1;
+    const availableSlots = location.available_slots || 0;
+    const percentage = (availableSlots / totalSlots) * 100;
+    
+    if (percentage > 30) return { status: 'Good Availability', color: 'bg-green-100 text-green-800' };
+    if (percentage > 10) return { status: 'Limited Spots', color: 'bg-yellow-100 text-yellow-800' };
+    return { status: 'Fully Booked', color: 'bg-red-100 text-red-800' };
   };
 
   const getAmenityIcon = (amenity: string) => {
@@ -37,6 +43,7 @@ const LocationCard = ({ location, onSelect }: LocationCardProps) => {
   };
 
   const { status, color } = availabilityStatus();
+  const amenities = location.amenities || [];
 
   return (
     <Card className="card-hover group">
@@ -47,12 +54,18 @@ const LocationCard = ({ location, onSelect }: LocationCardProps) => {
               {location.name}
             </h3>
             <div className="flex items-center text-sm text-muted-foreground">
-              <MapPin className="h-4 w-4 mr-1" />
-              {location.address}
+              <MapPin className="h-4 w-4 mr-1 flex-shrink-0" />
+              <span className="truncate">{location.address}</span>
+              {location.distance && (
+                <>
+                  <span className="mx-2">•</span>
+                  <span>{location.distance} km away</span>
+                </>
+              )}
             </div>
           </div>
           <Badge variant="outline" className={color}>
-            {location.availableSlots} available
+            {location.available_slots} available
           </Badge>
         </div>
       </CardHeader>
@@ -65,11 +78,11 @@ const LocationCard = ({ location, onSelect }: LocationCardProps) => {
           </div>
           <div className="flex items-center">
             <DollarSign className="h-4 w-4 mr-2 text-muted-foreground" />
-            <span>${location.pricePerHour}/hr</span>
+            <span>${location.pricing_per_hour}/hr</span>
           </div>
           <div className="text-center">
             <span className="text-xs text-muted-foreground">Total Slots</span>
-            <div className="font-semibold">{location.totalSlots}</div>
+            <div className="font-semibold">{location.total_slots}</div>
           </div>
         </div>
 
@@ -77,19 +90,21 @@ const LocationCard = ({ location, onSelect }: LocationCardProps) => {
         {location.amenities.length > 0 && (
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground">Amenities</p>
-            <div className="flex flex-wrap gap-1">
-              {location.amenities.slice(0, 3).map((amenity, index) => (
-                <Badge key={index} variant="secondary" className="text-xs flex items-center gap-1">
+            {amenities.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-2">
+              {amenities.map((amenity, index) => (
+                <Badge key={index} variant="outline" className="flex items-center gap-1">
                   {getAmenityIcon(amenity)}
                   {amenity}
                 </Badge>
               ))}
+            </div>
+          )}
               {location.amenities.length > 3 && (
                 <Badge variant="secondary" className="text-xs">
                   +{location.amenities.length - 3} more
                 </Badge>
               )}
-            </div>
           </div>
         )}
 

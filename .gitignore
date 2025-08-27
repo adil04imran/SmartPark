@@ -22,3 +22,26 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Environment variables
+.env
+
+# Firebase
+firebase-service-account.json
+.firebaserc
+
+# Local development
+.firebase/
+.firebase-debug.*
+
+# IDE
+.idea/
+*.iml
+
+# Logs
+logs/
+*.log
+
+# Local development
+.DS_Store
+Thumbs.db

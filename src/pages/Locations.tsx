@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,29 +7,72 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import LocationCard from '@/components/LocationCard';
 import Navbar from '@/components/Navbar';
-import { mockLocations } from '@/data/mockData';
-import { Search, Map, List, Filter, SlidersHorizontal } from 'lucide-react';
+import { Search, Map, List, SlidersHorizontal } from 'lucide-react';
+import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { db } from '@/firebase/config';
+import { Skeleton } from '@/components/ui/skeleton';
+
+interface Location {
+  id: string;
+  name: string;
+  address: string;
+  total_slots: number;
+  available_slots: number;
+  pricing_per_hour: number;
+  created_at: string;
+}
 
 const Locations = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('all');
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  const filteredLocations = mockLocations.filter(location => {
-    const matchesSearch = location.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         location.address.toLowerCase().includes(searchTerm.toLowerCase());
+  // Fetch locations from Firestore
+  useEffect(() => {
+    const locationsQuery = query(
+      collection(db, 'locations'),
+      orderBy('created_at', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(locationsQuery, (snapshot) => {
+      const locationsData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        name: doc.data().name || '',
+        address: doc.data().address || '',
+        total_slots: doc.data().total_slots || 0,
+        available_slots: doc.data().available_slots || 0,
+        pricing_per_hour: doc.data().pricing_per_hour || 0,
+        created_at: doc.data().created_at?.toDate?.()?.toISOString() || new Date().toISOString(),
+      }));
+      
+      setLocations(locationsData);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const filteredLocations = locations.filter((location: Location) => {
+    if (!location) return false;
+    
+    const matchesSearch = location.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         location.address?.toLowerCase().includes(searchTerm.toLowerCase());
     
     if (selectedFilter === 'available') {
-      return matchesSearch && location.availableSlots > 10;
+      return matchesSearch && (location.available_slots || 0) > 10;
     } else if (selectedFilter === 'limited') {
-      return matchesSearch && location.availableSlots <= 10 && location.availableSlots > 0;
+      return matchesSearch && (location.available_slots || 0) <= 10 && (location.available_slots || 0) > 0;
     }
     
     return matchesSearch;
   });
 
-  const handleLocationSelect = (locationId: number) => {
-    navigate(`/slots/${locationId}`);
+  const handleLocationSelect = (locationId: string) => {
+    if (locationId) {
+      navigate(`/slots/${locationId}`);
+    }
   };
 
   return (
@@ -101,26 +144,44 @@ const Locations = () => {
           </TabsList>
 
           <TabsContent value="list" className="mt-6">
-            {filteredLocations.length > 0 ? (
+            {loading ? (
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredLocations.map((location) => (
+                {[1, 2, 3].map((i) => (
+                  <Card key={i}>
+                    <CardContent className="p-6">
+                      <Skeleton className="h-6 w-3/4 mb-4" />
+                      <Skeleton className="h-4 w-full mb-2" />
+                      <Skeleton className="h-4 w-1/2 mb-4" />
+                      <div className="flex justify-between items-center">
+                        <Skeleton className="h-4 w-16" />
+                        <Skeleton className="h-9 w-24" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : filteredLocations.length > 0 ? (
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredLocations.map((location) => (location && (
                   <LocationCard
                     key={location.id}
-                    location={location}
+                    location={{
+                      id: location.id,
+                      name: location.name,
+                      address: location.address,
+                      total_slots: location.total_slots,
+                      available_slots: location.available_slots,
+                      pricing_per_hour: location.pricing_per_hour,
+                      distance: '0.5', // You might want to calculate this based on user's location
+                      amenities: ['24/7 Access', 'Security Cameras'] // Add actual amenities from your data
+                    }}
                     onSelect={handleLocationSelect}
                   />
-                ))}
+                )))}
               </div>
             ) : (
               <div className="text-center py-12">
-                <div className="text-muted-foreground mb-4">
-                  <Search className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p className="text-lg">No parking locations found</p>
-                  <p className="text-sm">Try adjusting your search criteria</p>
-                </div>
-                <Button variant="outline" onClick={() => setSearchTerm('')}>
-                  Clear Search
-                </Button>
+                <p className="text-muted-foreground">No parking locations found matching your criteria.</p>
               </div>
             )}
           </TabsContent>
@@ -175,7 +236,7 @@ const Locations = () => {
             <Card>
               <CardContent className="p-4 text-center">
                 <div className="text-2xl font-bold text-success">
-                  {filteredLocations.reduce((sum, loc) => sum + loc.availableSlots, 0)}
+                  {filteredLocations.reduce((sum, loc) => sum + (loc.available_slots || 0), 0)}
                 </div>
                 <div className="text-sm text-muted-foreground">Available Spots</div>
               </CardContent>
@@ -183,7 +244,9 @@ const Locations = () => {
             <Card>
               <CardContent className="p-4 text-center">
                 <div className="text-2xl font-bold text-foreground">
-                  ${Math.min(...filteredLocations.map(loc => loc.pricePerHour))}
+                  ${filteredLocations.length > 0 
+                    ? Math.min(...filteredLocations.map(loc => loc.pricing_per_hour || 0)).toFixed(2)
+                    : '0.00'}
                 </div>
                 <div className="text-sm text-muted-foreground">Lowest Price/hr</div>
               </CardContent>
@@ -191,7 +254,7 @@ const Locations = () => {
             <Card>
               <CardContent className="p-4 text-center">
                 <div className="text-2xl font-bold text-foreground">
-                  {Math.min(...filteredLocations.map(loc => parseFloat(loc.distance)))}km
+                  {filteredLocations.length > 0 ? '0.5' : '0'}km
                 </div>
                 <div className="text-sm text-muted-foreground">Closest Distance</div>
               </CardContent>

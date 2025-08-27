@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { collection, getDocs, addDoc, serverTimestamp, DocumentData } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { db } from '@/firebase/config';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -50,6 +50,7 @@ const Admin = () => {
   const [locations, setLocations] = useState<Location[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editingLocation, setEditingLocation] = useState<Location | null>(null);
   const [newLocation, setNewLocation] = useState({
     name: '',
     address: '',
@@ -60,17 +61,12 @@ const Admin = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
 
+  // Set up real-time listeners
   useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      
-      // Fetch locations from Firestore
-      const locationsSnapshot = await getDocs(collection(db, 'locations'));
-      const locationsData = locationsSnapshot.docs.map(doc => ({
+    // Locations listener
+    const locationsQuery = query(collection(db, 'locations'), orderBy('created_at', 'desc'));
+    const unsubscribeLocations = onSnapshot(locationsQuery, (snapshot) => {
+      const locationsData = snapshot.docs.map(doc => ({
         id: doc.id,
         name: doc.data().name || '',
         address: doc.data().address || '',
@@ -79,60 +75,47 @@ const Admin = () => {
         pricing_per_hour: doc.data().pricing_per_hour || 0,
         created_at: doc.data().created_at?.toDate?.()?.toISOString() || new Date().toISOString(),
       })) as Location[];
-
-      // Fetch bookings from Firestore
-      const bookingsSnapshot = await getDocs(collection(db, 'bookings'));
-      const bookingsData = await Promise.all(
-        bookingsSnapshot.docs.map(async (doc) => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            start_time: data.start_time || '',
-            end_time: data.end_time || '',
-            total_amount: data.total_amount || 0,
-            status: data.status || 'pending',
-            profiles: { full_name: 'User' },
-            locations: { name: 'Location' },
-          } as Booking;
-        })
-      );
-
       setLocations(locationsData);
-      setBookings(bookingsData);
-    } catch (error) {
-      console.error('Error fetching data:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to fetch data. Please try again.',
-        variant: 'destructive',
-      });
-    } finally {
       setLoading(false);
-    }
-  };
+    });
+
+    // Bookings listener
+    const bookingsQuery = query(collection(db, 'bookings'));
+    const unsubscribeBookings = onSnapshot(bookingsQuery, (snapshot) => {
+      const bookingsData = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          start_time: data.start_time || '',
+          end_time: data.end_time || '',
+          total_amount: data.total_amount || 0,
+          status: data.status || 'pending',
+          profiles: { full_name: data.user_name || 'User' },
+          locations: { name: data.location_name || 'Location' },
+        } as Booking;
+      });
+      setBookings(bookingsData);
+    });
+
+    // Clean up listeners on unmount
+    return () => {
+      unsubscribeLocations();
+      unsubscribeBookings();
+    };
+  }, []);
 
   const handleAddLocation = async (e: React.FormEvent) => {
     e.preventDefault();
     
     try {
-      const docRef = await addDoc(collection(db, 'locations'), {
-        name: newLocation.name,
-        address: newLocation.address,
-        total_slots: Number(newLocation.total_slots),
-        available_slots: Number(newLocation.total_slots), // Initially all slots are available
-        pricing_per_hour: Number(newLocation.pricing_per_hour),
-        created_at: serverTimestamp(),
-      });
-
-      setLocations([...locations, {
-        id: docRef.id,
+      await addDoc(collection(db, 'locations'), {
         name: newLocation.name,
         address: newLocation.address,
         total_slots: Number(newLocation.total_slots),
         available_slots: Number(newLocation.total_slots),
         pricing_per_hour: Number(newLocation.pricing_per_hour),
-        created_at: new Date().toISOString(),
-      }]);
+        created_at: serverTimestamp(),
+      });
       
       setNewLocation({
         name: '',
@@ -153,6 +136,83 @@ const Admin = () => {
         variant: 'destructive',
       });
     }
+  };
+
+  const handleEditLocation = (location: Location) => {
+    setEditingLocation(location);
+    setNewLocation({
+      name: location.name,
+      address: location.address,
+      total_slots: location.total_slots.toString(),
+      pricing_per_hour: location.pricing_per_hour.toString(),
+    });
+    // Scroll to the form
+    document.getElementById('location-form')?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const handleUpdateLocation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingLocation) return;
+    
+    try {
+      await updateDoc(doc(db, 'locations', editingLocation.id), {
+        name: newLocation.name,
+        address: newLocation.address,
+        total_slots: Number(newLocation.total_slots),
+        pricing_per_hour: Number(newLocation.pricing_per_hour),
+      });
+      
+      setEditingLocation(null);
+      setNewLocation({
+        name: '',
+        address: '',
+        total_slots: '',
+        pricing_per_hour: '',
+      });
+      
+      toast({
+        title: 'Success',
+        description: 'Location updated successfully!',
+      });
+    } catch (error) {
+      console.error('Error updating location:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update location. Please try again.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleDeleteLocation = async (locationId: string) => {
+    if (!window.confirm('Are you sure you want to delete this location? This action cannot be undone.')) {
+      return;
+    }
+    
+    try {
+      await deleteDoc(doc(db, 'locations', locationId));
+      toast({
+        title: 'Success',
+        description: 'Location deleted successfully!',
+      });
+    } catch (error) {
+      console.error('Error deleting location:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to delete location. Please try again.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingLocation(null);
+    setNewLocation({
+      name: '',
+      address: '',
+      total_slots: '',
+      pricing_per_hour: '',
+    });
   };
 
   const handleSignOut = async () => {
@@ -254,14 +314,18 @@ const Admin = () => {
               <CardHeader>
                 <CardTitle className="flex items-center">
                   <Plus className="h-5 w-5 mr-2" />
-                  Add New Location
+                  {editingLocation ? 'Edit Location' : 'Add New Location'}
                 </CardTitle>
                 <CardDescription>
                   Create a new parking location for users to book
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <form onSubmit={handleAddLocation} className="w-full space-y-4">
+                <form 
+                  id="location-form"
+                  onSubmit={editingLocation ? handleUpdateLocation : handleAddLocation} 
+                  className="w-full space-y-4"
+                >
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="name">Location Name</Label>
@@ -307,10 +371,20 @@ const Admin = () => {
                       />
                     </div>
                   </div>
-                  <Button type="submit" className="w-full md:w-auto">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Create Location
-                  </Button>
+                  <div className="flex space-x-2">
+                    <Button type="submit">
+                      {editingLocation ? 'Update Location' : 'Create Location'}
+                    </Button>
+                    {editingLocation && (
+                      <Button 
+                        type="button" 
+                        variant="outline"
+                        onClick={handleCancelEdit}
+                      >
+                        Cancel
+                      </Button>
+                    )}
+                  </div>
                 </form>
               </CardContent>
             </Card>
@@ -349,15 +423,22 @@ const Admin = () => {
                         <TableCell>
                           {new Date(location.created_at).toLocaleDateString()}
                         </TableCell>
-                        <TableCell>
-                          <div className="flex space-x-2">
-                            <Button size="sm" variant="outline">
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button size="sm" variant="outline">
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
+                        <TableCell className="text-right space-x-1">
+                          <Button 
+                            variant="ghost" 
+                            size="icon"
+                            onClick={() => handleEditLocation(location)}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => handleDeleteLocation(location.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
