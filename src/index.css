@@ -2,6 +2,79 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Floating animation for parking spots & cars */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.animate-float-subtle {
+  animation: float 6s ease-in-out infinite;
+}
+
+/* Bounce animation for call-to-action */
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(-5%);
+    animation-timing-function: cubic-bezier(0.8, 0, 1, 1);
+  }
+  50% {
+    transform: translateY(0);
+    animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
+  }
+}
+
+.animate-bounce-slow {
+  animation: bounce 3s infinite;
+}
+
+/* Pulse glow for interactive elements */
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(100, 200, 255, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 15px rgba(100, 200, 255, 0);
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 2s ease-out infinite;
+}
+
+/* Slide in from left (for benefits section) */
+@keyframes slideInLeft {
+  0% {
+    opacity: 0;
+    transform: translateX(-50px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in-left {
+  animation: slideInLeft 0.8s ease-out forwards;
+}
+
+/* Fade in up (general purpose) */
+@keyframes fadeInUp {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+
 /* Smart Parking App Design System - Modern and Professional */
 
 @layer base {
@@ -15,11 +88,12 @@
     --popover: 0 0% 100%;
     --popover-foreground: 240 10% 3.9%;
 
-    /* Modern blue gradient for parking theme */
-    --primary: 217 91% 60%;
+    /* Enhanced modern blue gradient for parking theme */
+    --primary: 217 91% 60%; /* A vibrant blue */
     --primary-foreground: 0 0% 98%;
     --primary-light: 217 91% 75%;
     --primary-dark: 217 91% 45%;
+    --primary-accent: 230 80% 65%; /* Slightly more purple-ish blue for gradients */
 
     --secondary: 240 20% 96%;
     --secondary-foreground: 240 10% 3.9%;
@@ -45,14 +119,16 @@
     --radius: 0.75rem;
 
     /* Gradients for modern design */
-    --gradient-primary: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-light)));
+    --gradient-primary: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-accent)));
     --gradient-hero: linear-gradient(135deg, hsl(217 91% 60%), hsl(239 84% 67%));
     --gradient-card: linear-gradient(145deg, hsl(0 0% 100%), hsl(240 20% 98%));
+    --gradient-emerald-blue: linear-gradient(135deg, #10B981, #3B82F6); /* Specific for hero bg */
     
-    /* Shadows for depth */
+    /* Shadows for depth and modern feel */
     --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
     --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
     --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+    --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
     --shadow-glow: 0 0 0 1px hsl(var(--primary) / 0.1), 0 0 20px hsl(var(--primary) / 0.2);
 
     /* Animations */
@@ -120,8 +196,8 @@
     @apply text-primary-foreground border-0 shadow-md hover:shadow-lg transition-all duration-300 hover:scale-105;
   }
   
-  .gradient-hero {
-    background: var(--gradient-hero);
+  .gradient-hero-bg {
+    background: var(--gradient-emerald-blue); /* Using the new vibrant gradient */
   }
   
   .status-available {
@@ -153,7 +229,7 @@
     @apply animate-[fadeInUp_0.6s_ease-out_0.6s_forwards] opacity-0;
   }
   
-  .float-animation {
+  .float-animation-subtle {
     @apply animate-[float_3s_ease-in-out_infinite];
   }
   
@@ -161,7 +237,11 @@
     @apply animate-[bounce_2s_infinite];
   }
   
-  .pulse-glow {
+  .pulse-glow-blue {
     @apply animate-[pulseGlow_2s_ease-in-out_infinite];
+  }
+  
+  .slide-in-left {
+    @apply animate-[slideInLeft_0.8s_ease-out_forwards] opacity-0;
   }
 }
