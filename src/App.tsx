@@ -13,6 +13,9 @@ import BookingConfirmation from "./pages/BookingConfirmation";
 import Bookings from "./pages/Bookings";
 import Profile from "./pages/Profile";
 import Admin from "./pages/Admin";
+import PopularLocations from "./pages/PopularLocations";
+import HowItWorks from "./pages/HowItWorks";
+import Safety from "./pages/Safety";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -48,6 +51,15 @@ const App = () => (
             <AuthGuard requireAuth>
               <Slots />
             </AuthGuard>
+          } />
+          <Route path="/popular-locations" element={
+            <PopularLocations />
+          } />
+          <Route path="/how-it-works" element={
+            <HowItWorks />
+          } />
+          <Route path="/safety" element={
+            <Safety />
           } />
           <Route path="/booking-confirmation" element={
             <AuthGuard requireAuth>

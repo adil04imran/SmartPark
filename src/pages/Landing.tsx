@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { ScrollIndicator } from '@/components/ui/ScrollIndicator';
+import Navbar from '@/components/Navbar';
 import { 
   Car,
   MapPin,
@@ -51,11 +53,23 @@ const Landing = () => {
     "Contactless entry and exit"
   ];
 
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setScrolled(window.scrollY > 10);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-white">
+      <Navbar />
+      
       {/* Hero Section */}
-      <section className="relative py-12 md:py-20 overflow-hidden bg-gradient-to-br from-blue-50 to-white">
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-20">
+      <section className={`relative pt-0 pb-8 md:pb-12 overflow-hidden bg-gradient-to-br from-blue-50 to-white transition-all duration-300`}>
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             {/* Left side - Content */}
             <div className="text-center lg:text-left">
@@ -115,9 +129,6 @@ const Landing = () => {
                   }}
                 />
               </div>
-              {/* Decorative background elements */}
-              <div className="absolute -bottom-20 -right-20 w-96 h-96 bg-blue-100 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
-              <div className="absolute -top-20 -left-20 w-96 h-96 bg-blue-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
             </div>
           </div>
         </div>
@@ -138,16 +149,41 @@ const Landing = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {features.map((feature, index) => (
-              <div 
+              <motion.div 
                 key={index}
-                className="bg-white p-6 rounded-xl shadow-sm hover:shadow-md transition-all duration-300 border border-gray-100 hover:border-blue-100"
+                className="group relative bg-white p-6 rounded-xl shadow-sm border border-gray-100 overflow-hidden"
+                whileHover={{ 
+                  y: -5,
+                  boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)'
+                }}
+                transition={{ type: 'spring', stiffness: 300, damping: 20 }}
               >
-                <div className="w-12 h-12 flex items-center justify-center rounded-lg bg-blue-50 text-blue-600 mb-4">
-                  {feature.icon}
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">{feature.title}</h3>
-                <p className="text-gray-600 text-sm">{feature.description}</p>
-              </div>
+                {/* Hover effect background */}
+                <div className="absolute inset-0 bg-gradient-to-br from-blue-50 to-white opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10"></div>
+                
+                {/* Icon with animation */}
+                <motion.div 
+                  className="w-14 h-14 flex items-center justify-center rounded-2xl bg-blue-50 text-blue-600 mb-4 group-hover:bg-blue-100 transition-colors duration-300"
+                  whileHover={{ 
+                    scale: 1.1,
+                    rotate: 5
+                  }}
+                >
+                  {React.cloneElement(feature.icon, {
+                    className: 'w-6 h-6 group-hover:scale-110 transition-transform duration-300'
+                  })}
+                </motion.div>
+                
+                <h3 className="text-lg font-semibold text-gray-900 mb-2 group-hover:text-blue-600 transition-colors duration-300">
+                  {feature.title}
+                </h3>
+                <p className="text-gray-600 text-sm group-hover:text-gray-700 transition-colors duration-300">
+                  {feature.description}
+                </p>
+                
+                {/* Animated border bottom on hover */}
+                <div className="absolute bottom-0 left-0 w-0 h-1 bg-blue-500 group-hover:w-full transition-all duration-500"></div>
+              </motion.div>
             ))}
           </div>
           
@@ -258,14 +294,6 @@ const Landing = () => {
                 >
                   Start Parking Smarter
                 </Button>
-                <Button 
-                  variant="outline"
-                  size="lg" 
-                  className="px-8 py-6 text-base font-medium border-slate-200 hover:bg-slate-50 text-slate-700"
-                  onClick={() => document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' })}
-                >
-                  How It Works <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
               </div>
             </div>
             {/* Added an illustrative image for benefits section */}
@@ -297,7 +325,7 @@ const Landing = () => {
             <Button 
               size="lg" 
               variant="outline" 
-              className="border-white text-white hover:bg-white hover:text-blue-700 px-8 py-6 text-lg transition-all duration-300 hover:scale-110 hover:shadow-2xl"
+              className="border-2 border-white/50 text-white bg-white/10 backdrop-blur-sm hover:bg-white hover:text-blue-700 px-8 py-6 text-lg transition-all duration-300 hover:scale-110 hover:shadow-2xl"
               onClick={() => navigate('/locations')}
             >
               Find Parking
@@ -313,16 +341,6 @@ const Landing = () => {
         </div>
       </section>
 
-      {/* Final CTA */}
-      <section className="py-16 bg-blue-600 text-center text-white">
-        <h2 className="text-2xl font-bold mb-4">Ready to find parking?</h2>
-        <Button 
-          onClick={() => navigate('/register')}
-          className="bg-white text-blue-600 hover:bg-gray-100 px-6 py-3"
-        >
-          Get Started
-        </Button>
-      </section>
     </div>
   );
 };

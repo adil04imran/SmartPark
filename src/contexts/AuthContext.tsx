@@ -81,30 +81,74 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const signInWithGoogle = async () => {
     try {
       setLoading(true);
+      console.log('Starting Google sign-in...');
+      
+      // Check if this is a direct user interaction
+      const isUserInteraction = document.visibilityState === 'visible';
+      if (!isUserInteraction) {
+        throw new Error('Sign-in must be triggered by a user interaction');
+      }
+      
       const provider = new GoogleAuthProvider();
       provider.addScope('profile');
       provider.addScope('email');
       
-      const result = await signInWithPopup(auth, provider);
-      const user = result.user;
+      console.log('Google provider configured, opening popup...');
       
-      if (!user) throw new Error('Authentication failed');
-      
-      const profile = await syncUserProfile(user);
-      setCurrentUser(user);
-      setUserProfile(profile);
-      
-      toast({
-        title: 'Signed in successfully',
-        description: `Welcome back, ${user.displayName || 'User'}!`,
-      });
+      try {
+        const result = await signInWithPopup(auth, provider);
+        console.log('Google sign-in successful, user:', result.user?.email);
+        
+        if (!result.user) {
+          throw new Error('No user returned from Google sign-in');
+        }
+        
+        console.log('Syncing user profile...');
+        const profile = await syncUserProfile(result.user);
+        setCurrentUser(result.user);
+        setUserProfile(profile);
+        
+        console.log('Google sign-in flow completed successfully');
+      } catch (popupError) {
+        console.error('Popup error details:', {
+          code: popupError?.code,
+          message: popupError?.message,
+          email: popupError?.customData?.email,
+          details: popupError
+        });
+        
+        // If popup is blocked, show a specific message
+        if (popupError?.code === 'auth/popup-blocked' || 
+            popupError?.code === 'auth/popup-closed-by-user' ||
+            popupError?.message?.includes('popup')) {
+          throw new Error('Please allow popups for this site to sign in with Google');
+        }
+        throw popupError;
+      }
     } catch (error) {
-      console.error('Google sign-in error:', error);
+      console.error('Google sign-in error details:', {
+        name: error?.name,
+        code: error?.code,
+        message: error?.message,
+        fullError: JSON.stringify(error, Object.getOwnPropertyNames(error))
+      });
+      
+      let errorMessage = 'Failed to sign in with Google';
+      
+      if (error?.code === 'auth/popup-closed-by-user') {
+        errorMessage = 'Sign in was cancelled';
+      } else if (error?.code === 'auth/account-exists-with-different-credential') {
+        errorMessage = 'An account already exists with the same email but different sign-in credentials';
+      } else if (error?.code) {
+        errorMessage = `Error: ${error.message}`;
+      }
+      
       toast({
         title: 'Error',
-        description: 'Failed to sign in with Google',
+        description: errorMessage,
         variant: 'destructive',
       });
+      
       throw error;
     } finally {
       setLoading(false);
@@ -179,6 +223,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           const profile = await syncUserProfile(user);
           setCurrentUser(user);
           setUserProfile(profile);
+          
+          // Show welcome message on successful sign-in
+          toast({
+            title: 'Signed in successfully',
+            description: `Welcome back, ${user.displayName || 'User'}!`,
+          });
         } catch (error) {
           console.error('Auth state change error:', error);
         }
