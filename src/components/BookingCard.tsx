@@ -1,4 +1,4 @@
-import { Calendar, Clock, MapPin, DollarSign, Car } from 'lucide-react';
+import { Calendar, Clock, Car } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -101,8 +101,8 @@ const BookingCard = ({ booking, onViewDetails, onCancel }: BookingCardProps) => 
               <span className="font-medium">{formatDuration(booking.duration)}</span>
             </div>
             <div className="flex items-center">
-              <DollarSign className="h-4 w-4 mr-2 text-muted-foreground" />
-              <span className="font-semibold text-primary">${booking.totalCost.toFixed(2)}</span>
+              <span className="mr-2 text-muted-foreground">₹</span>
+              <span className="font-semibold text-primary">{booking.totalCost.toFixed(2)}</span>
             </div>
           </div>
         </div>

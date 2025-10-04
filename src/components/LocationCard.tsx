@@ -1,4 +1,4 @@
-import { MapPin, Clock, DollarSign, Star, Zap, Shield } from 'lucide-react';
+import { MapPin, Clock, Star, Zap, Shield } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -43,7 +43,8 @@ const LocationCard = ({ location, onSelect }: LocationCardProps) => {
   };
 
   const { status, color } = availabilityStatus();
-  const amenities = location.amenities || [];
+  // Ensure amenities is always an array with a default empty array if undefined
+  const amenities = Array.isArray(location.amenities) ? location.amenities : [];
 
   return (
     <Card className="card-hover group">
@@ -71,8 +72,8 @@ const LocationCard = ({ location, onSelect }: LocationCardProps) => {
             <span>24/7</span>
           </div>
           <div className="flex items-center">
-            <DollarSign className="h-4 w-4 mr-2 text-muted-foreground" />
-            <span>${location.pricing_per_hour}/hr</span>
+            <span className="mr-2 text-muted-foreground">₹</span>
+            <span>{location.pricing_per_hour}/hr</span>
           </div>
           <div className="text-center">
             <span className="text-xs text-muted-foreground">Total Slots</span>
@@ -81,10 +82,9 @@ const LocationCard = ({ location, onSelect }: LocationCardProps) => {
         </div>
 
         {/* Amenities */}
-        {location.amenities.length > 0 && (
+        {amenities.length > 0 && (
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground">Amenities</p>
-            {amenities.length > 0 && (
             <div className="flex flex-wrap gap-2 mt-2">
               {amenities.map((amenity, index) => (
                 <Badge key={index} variant="outline" className="flex items-center gap-1">
@@ -92,13 +92,12 @@ const LocationCard = ({ location, onSelect }: LocationCardProps) => {
                   {amenity}
                 </Badge>
               ))}
-            </div>
-          )}
-              {location.amenities.length > 3 && (
+              {amenities.length > 3 && (
                 <Badge variant="secondary" className="text-xs">
-                  +{location.amenities.length - 3} more
+                  +{amenities.length - 3} more
                 </Badge>
               )}
+            </div>
           </div>
         )}
 

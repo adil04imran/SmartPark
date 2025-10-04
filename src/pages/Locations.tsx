@@ -246,7 +246,7 @@ const Locations = () => {
               <Card>
                 <CardContent className="p-3 sm:p-4 text-center">
                   <div className="text-xl sm:text-2xl font-bold text-foreground">
-                    ${filteredLocations.length > 0 
+                    ₹{filteredLocations.length > 0 
                       ? Math.min(...filteredLocations.map(loc => loc.pricing_per_hour || 0)).toFixed(2)
                       : '0.00'}
                   </div>

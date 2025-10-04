@@ -1,5 +1,5 @@
 import { Car, Zap, Accessibility } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
@@ -60,9 +60,9 @@ const SlotCard = ({ slot, isSelected = false, onSelect }: SlotCardProps) => {
     }
   };
 
-  const isClickable = slot.status === 'available' && onSelect;
-
-  const isDisabled = slot.status !== 'available';
+  // Ensure status has a default value of 'available' if undefined
+  const status = slot.status || 'available';
+  const isDisabled = status !== 'available';
 
   return (
     <div className="h-full w-full p-1">
@@ -99,19 +99,19 @@ const SlotCard = ({ slot, isSelected = false, onSelect }: SlotCardProps) => {
             {slot.number || `F${slot.floor || 'N'}-${slot.id.slice(0, 3)}`}
           </h4>
           <div className="text-xs text-muted-foreground">
-            ${slot.pricePerHour || '0'}/hr
+            ₹{slot.pricePerHour || '0'}/hr
           </div>
         </div>
         
         <div className="w-full px-2 pb-1">
           <Badge 
-            variant={slot.status === 'available' ? 'default' : 'secondary'} 
+            variant={status === 'available' ? 'default' : 'secondary'} 
             className={cn(
               'w-full justify-center text-xs font-normal rounded-t-none rounded-b-sm',
-              slot.status === 'available' ? 'bg-green-100 text-green-800 hover:bg-green-100' : ''
+              status === 'available' ? 'bg-green-100 text-green-800 hover:bg-green-100' : ''
             )}
           >
-            {slot.status.charAt(0).toUpperCase() + slot.status.slice(1)}
+            {status.charAt(0).toUpperCase() + status.slice(1)}
           </Badge>
         </div>
       </Card>

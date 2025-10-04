@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/components/AuthGuard';
 import { useToast } from '@/hooks/use-toast';
@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, onSnapshot, query, orderBy, writeBatch } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, doc, updateDoc, deleteDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/firebase/config';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -59,7 +59,7 @@ const Admin = () => {
     total_slots: '',
     pricing_per_hour: ''
   });
-  const { currentUser, signOut } = useAuth();
+  const { signOut } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -75,36 +75,61 @@ const Admin = () => {
         total_slots: doc.data().total_slots || 0,
         available_slots: doc.data().available_slots || 0,
         pricing_per_hour: doc.data().pricing_per_hour || 0,
-        created_at: doc.data().created_at?.toDate?.()?.toISOString() || new Date().toISOString(),
+        created_at: doc.data().created_at || ''
       })) as Location[];
       setLocations(locationsData);
       setLoading(false);
     });
 
-    // Bookings listener
+    // Bookings listener with error handling
     const bookingsQuery = query(collection(db, 'bookings'));
-    const unsubscribeBookings = onSnapshot(bookingsQuery, (snapshot) => {
-      const bookingsData = snapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          start_time: data.start_time || '',
-          end_time: data.end_time || '',
-          total_amount: data.total_amount || 0,
-          status: data.status || 'pending',
-          profiles: { full_name: data.user_name || 'User' },
-          locations: { name: data.location_name || 'Location' },
-        } as Booking;
-      });
-      setBookings(bookingsData);
-    });
+    const unsubscribeBookings = onSnapshot(
+      bookingsQuery,
+      (snapshot) => {
+        const bookingsData = snapshot.docs.map(doc => {
+          const data = doc.data();
+          // Safely parse total_amount, defaulting to 0 if invalid
+          let totalAmount = 0;
+          try {
+            totalAmount = typeof data.total_amount === 'number' 
+              ? data.total_amount 
+              : parseFloat(data.total_amount) || 0;
+          } catch (e) {
+            console.warn(`Invalid total_amount for booking ${doc.id}:`, data.total_amount);
+          }
+          
+          return {
+            id: doc.id,
+            start_time: data.start_time || '',
+            end_time: data.end_time || '',
+            total_amount: totalAmount,
+            status: data.status || 'pending',
+            profiles: {
+              full_name: data.user_name || data.profiles?.full_name || 'User'
+            },
+            locations: {
+              name: data.location_name || data.locations?.name || 'Location'
+            },
+          } as Booking;
+        });
+        setBookings(bookingsData);
+      },
+      (error) => {
+        console.error('Error in bookings listener:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to load bookings. Please refresh the page.',
+          variant: 'destructive',
+        });
+      }
+    );
 
-    // Clean up listeners on unmount
+    // Cleanup function to unsubscribe from listeners
     return () => {
       unsubscribeLocations();
       unsubscribeBookings();
     };
-  }, []);
+  }, [toast]);
 
   const handleAddLocation = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -237,6 +262,13 @@ const Admin = () => {
     navigate('/');
   };
 
+  // Calculate total revenue from completed and active bookings
+  const totalRevenue = React.useMemo(() => {
+    return bookings
+      .filter(booking => booking.status === 'completed' || booking.status === 'active')
+      .reduce((sum, booking) => sum + (Number(booking.total_amount) || 0), 0);
+  }, [bookings]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -245,24 +277,20 @@ const Admin = () => {
     );
   }
 
-  const header = (
-    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground mb-2">SmartPark Admin</h1>
-        <p className="text-muted-foreground">Manage locations and view booking analytics</p>
-      </div>
-      <Button variant="outline" onClick={handleSignOut} className="flex items-center gap-2">
-        <LogOut className="h-4 w-4" />
-        Sign Out
-      </Button>
-    </div>
-  );
-
   return (
-    <PageLayout header={header}>
-      <div className="py-4">
+    <PageLayout>
+      <div className="container mx-auto py-8 px-4">
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-3xl font-bold">Admin Dashboard</h1>
+          <Button variant="outline" onClick={handleSignOut}>
+            <LogOut className="h-4 w-4 mr-2" />
+            Sign Out
+          </Button>
+        </div>
+
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
+          {/* Total Locations Card */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Locations</CardTitle>
@@ -272,6 +300,8 @@ const Admin = () => {
               <div className="text-2xl font-bold">{locations.length}</div>
             </CardContent>
           </Card>
+
+          {/* Total Slots Card */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Slots</CardTitle>
@@ -279,10 +309,12 @@ const Admin = () => {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {locations.reduce((sum, loc) => sum + loc.total_slots, 0)}
+                {locations.reduce((sum, loc) => sum + (loc.total_slots || 0), 0)}
               </div>
             </CardContent>
           </Card>
+
+          {/* Active Bookings Card */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Active Bookings</CardTitle>
@@ -294,6 +326,8 @@ const Admin = () => {
               </div>
             </CardContent>
           </Card>
+
+          {/* Total Revenue Card */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
@@ -301,7 +335,7 @@ const Admin = () => {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                ${bookings.reduce((sum, booking) => sum + Number(booking.total_amount), 0).toFixed(2)}
+                ₹{totalRevenue.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
               </div>
             </CardContent>
           </Card>
@@ -370,7 +404,7 @@ const Admin = () => {
                       </p>
                     </div>
                     <div>
-                      <Label htmlFor="pricing">Price per Hour ($)</Label>
+                      <Label htmlFor="pricing">Price per Hour (₹)</Label>
                       <Input
                         id="pricing"
                         type="number"
@@ -430,7 +464,7 @@ const Admin = () => {
                             {location.available_slots}/{location.total_slots}
                           </Badge>
                         </TableCell>
-                        <TableCell>${location.pricing_per_hour}</TableCell>
+                        <TableCell>₹{location.pricing_per_hour}</TableCell>
                         <TableCell>
                           {new Date(location.created_at).toLocaleDateString()}
                         </TableCell>
@@ -509,6 +543,6 @@ const Admin = () => {
       </div>
     </PageLayout>
   );
-};
+}
 
 export default Admin;
