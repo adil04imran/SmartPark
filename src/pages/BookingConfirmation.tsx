@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import Navbar from '@/components/Navbar';
+import PageLayout from '@/components/layout/PageLayout';
 import { useToast } from '@/hooks/use-toast';
 import { 
   MapPin, 
@@ -30,16 +30,19 @@ const BookingConfirmation = () => {
   const [isProcessing, setIsProcessing] = useState(false);
 
   if (!bookingData) {
+    const header = (
+      <>
+        <h1 className="text-2xl font-bold text-foreground mb-2">No Booking Data Found</h1>
+        <p className="text-muted-foreground">Please select a parking spot to book</p>
+      </>
+    );
+
     return (
-      <div className="min-h-screen bg-background">
-        <Navbar />
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="text-center">
-            <h1 className="text-2xl font-bold text-foreground mb-4">No Booking Data Found</h1>
-            <Button onClick={() => navigate('/locations')}>Back to Locations</Button>
-          </div>
+      <PageLayout header={header}>
+        <div className="text-center py-12">
+          <Button onClick={() => navigate('/locations')}>Back to Locations</Button>
         </div>
-      </div>
+      </PageLayout>
     );
   }
 
@@ -67,11 +70,16 @@ const BookingConfirmation = () => {
     });
   };
 
+  const header = (
+    <>
+      <h1 className="text-2xl font-bold text-foreground mb-2">Confirm Your Booking</h1>
+      <p className="text-muted-foreground">Review your booking details and complete payment</p>
+    </>
+  );
+
   return (
-    <div className="min-h-screen bg-background">
-      <Navbar />
-      
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <PageLayout header={header}>
+      <div className="py-4">
         {/* Header */}
         <div className="mb-8">
           <Button 
@@ -82,9 +90,6 @@ const BookingConfirmation = () => {
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back
           </Button>
-          
-          <h1 className="text-3xl font-bold text-foreground mb-2">Confirm Your Booking</h1>
-          <p className="text-muted-foreground">Review your parking reservation details</p>
         </div>
 
         <div className="grid lg:grid-cols-3 gap-8">
@@ -264,7 +269,7 @@ const BookingConfirmation = () => {
           </div>
         </div>
       </div>
-    </div>
+    </PageLayout>
   );
 };
 

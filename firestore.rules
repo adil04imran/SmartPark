@@ -6,11 +6,38 @@ service cloud.firestore {
       allow read: if true;
     }
     
+    // Locations collection
+    match /locations/{locationId} {
+      // Allow read access to all
+      allow read: if true;
+      
+      // Allow authenticated users to create locations
+      allow create: if request.auth != null;
+      
+      // Allow authenticated users to update locations
+      allow update: if request.auth != null;
+      
+      // Allow authenticated users to delete locations
+      allow delete: if request.auth != null;
+    }
+    
     // Slots collection
     match /slots/{slotId} {
-      // Only allow updates to status and updatedAt fields
+      // Allow read access to all
+      allow read: if true;
+      
+      // Allow authenticated users to create slots
+      allow create: if request.auth != null;
+      
+      // Allow updates to status and updatedAt fields
       allow update: if request.auth != null &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt']);
+      
+      // Allow server-side updates
+      allow update: if request.auth == null; // For server-side operations
+      
+      // Allow deletion by authenticated users
+      allow delete: if request.auth != null;
     }
     
     // Bookings collection
@@ -19,14 +46,21 @@ service cloud.firestore {
       allow create: if request.auth != null &&
         request.resource.data.userId == request.auth.uid;
       
-      // Users can read their own bookings
+      // Users can read their own bookings, admins can read all
       allow read: if request.auth != null && 
-        (resource.data.userId == request.auth.uid || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.admin == true);
+        (resource.data.userId == request.auth.uid || 
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.admin == true));
       
-      // Only allow updates to status field by admins
+      // Allow updates to status and updatedAt fields
       allow update: if request.auth != null && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.admin == true &&
+        (resource.data.userId == request.auth.uid || 
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.admin == true)) &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt']);
+      
+      // Allow server-side updates
+      allow update: if request.auth == null; // For server-side operations
     }
     
     // Users collection
@@ -36,6 +70,9 @@ service cloud.firestore {
       
       // Users can create/update their own profile
       allow write: if request.auth != null && request.auth.uid == userId;
+      
+      // Allow server-side updates
+      allow write: if request.auth == null; // For server-side operations
     }
   }
 }

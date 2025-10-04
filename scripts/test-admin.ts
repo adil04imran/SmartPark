@@ -1,4 +1,5 @@
-require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
+import 'dotenv/config';
+import { adminAuth, adminDb } from '../src/firebase/admin';
 
 // Verify required environment variables
 const requiredVars = ['FIREBASE_ADMIN_KEY'];
@@ -11,9 +12,6 @@ for (const varName of requiredVars) {
 
 console.log('Environment variables loaded successfully');
 
-// Import after loading environment variables
-const { adminAuth, adminDb } = require('../src/firebase/admin');
-
 async function testAdmin() {
   if (!adminAuth || !adminDb) {
     console.error('❌ Firebase Admin not initialized');
@@ -25,7 +23,7 @@ async function testAdmin() {
     console.log('Testing Firestore connection...');
     
     // Test Firestore connection
-    const testDoc = await adminDb.collection('test').doc('connection-test').get();
+    await adminDb.collection('test').doc('connection-test').get();
     console.log('✅ Firestore connection successful');
     
     // List first 5 users
@@ -35,10 +33,11 @@ async function testAdmin() {
       console.log(`- ${userRecord.email} (${userRecord.uid})`);
     });
     
-  } catch (error: any) {
-    console.error('❌ Test failed:', error.message);
-    if (error.errorInfo) {
-      console.error('Error details:', error.errorInfo);
+  } catch (error) {
+    const firebaseError = error as { message: string; errorInfo?: any };
+    console.error('❌ Test failed:', firebaseError.message);
+    if (firebaseError.errorInfo) {
+      console.error('Error details:', firebaseError.errorInfo);
     }
     process.exit(1);
   }

@@ -13,6 +13,7 @@ import {
   writeBatch,
   serverTimestamp
 } from 'firebase/firestore';
+import { createBookingWithEndTime } from '@/utils/bookingManager';
 import { auth, db } from '@/firebase/config';
 import { useToast } from '@/hooks/use-toast';
 import type { SlotStatus } from '@/components/SlotCard';
@@ -25,7 +26,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import SlotCard from '@/components/SlotCard';
-import Navbar from '@/components/Navbar';
+// Navbar is now handled by PageLayout
 import { 
   ArrowLeft, 
   MapPin, 
@@ -36,6 +37,7 @@ import {
   Zap,
   Shield
 } from 'lucide-react';
+import PageLayout from '@/components/layout/PageLayout';
 
 interface Location {
   id: string;
@@ -347,32 +349,42 @@ const Slots = () => {
       const [endHours, endMinutes] = endTime.split(':').map(Number);
       
       // Create booking document
+      // Calculate duration in hours
+      const duration = (endHours * 60 + endMinutes - (startHours * 60 + startMinutes)) / 60;
+      const totalCost = calculateTotalPrice(selectedSlotData.pricePerHour, startTime, endTime);
+
+      // Create the base booking data
       const bookingData = {
         slotId: selectedSlot,
         slotNumber: selectedSlotData.number,
         locationId: locationId,
+        locationName: location?.name || 'Unknown Location',
         userId: auth.currentUser?.uid,
         userName: auth.currentUser?.displayName || 'Guest',
         userEmail: auth.currentUser?.email,
+        bookingDate: bookingDate,
         date: bookingDate,
         startTime,
         endTime,
+        duration,
         startTimestamp: new Date(year, month - 1, day, startHours, startMinutes),
-        endTimestamp: new Date(year, month - 1, day, endHours, endMinutes),
         pricePerHour: selectedSlotData.pricePerHour,
-        totalPrice: calculateTotalPrice(selectedSlotData.pricePerHour, startTime, endTime),
-        status: 'confirmed',
-        createdAt: new Date(),
-        updatedAt: new Date()
+        totalPrice: totalCost,
+        totalCost: totalCost,
+        status: 'active',
+        createdAt: serverTimestamp()
       };
 
+      // Create the booking with end timestamp and proper Firestore timestamps
+      const bookingWithTimestamps = await createBookingWithEndTime(bookingData);
+
       // Add to Firestore
-      const docRef = await addDoc(collection(db, 'bookings'), bookingData);
+      const docRef = await addDoc(collection(db, 'bookings'), bookingWithTimestamps);
       
       // Update slot status
       await updateDoc(doc(db, 'slots', selectedSlot), {
         status: 'booked',
-        updatedAt: new Date()
+        updatedAt: serverTimestamp()
       });
 
       toast({
@@ -419,28 +431,25 @@ const Slots = () => {
   const availableSlots = slots.filter(s => s.status === 'available').length;
 
   return (
-    <div className="min-h-screen bg-background">
-      <Navbar />
-      
-      <div className="container mx-auto px-4 py-8">
-        <Button 
-          variant="ghost" 
-          className="mb-6"
-          onClick={() => navigate(-1)}
-        >
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Locations
-        </Button>
+    <PageLayout>
+      <Button 
+        variant="ghost" 
+        className="mb-6"
+        onClick={() => navigate(-1)}
+      >
+        <ArrowLeft className="h-4 w-4 mr-2" />
+        Back to Locations
+      </Button>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
           {/* Left Column - Slots */}
           <div className="lg:col-span-2">
             <Card>
               <CardHeader>
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <div>
-                    <h2 className="text-2xl font-bold">Available Parking Slots</h2>
-                    <p className="text-muted-foreground">
+                    <h2 className="text-xl sm:text-2xl font-bold">Available Parking Slots</h2>
+                    <p className="text-sm sm:text-base text-muted-foreground">
                       {availableSlots} of {slots.length} available
                     </p>
                   </div>
@@ -449,13 +458,13 @@ const Slots = () => {
               
               <CardContent>
                 {loading ? (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
                     {[...Array(10)].map((_, i) => (
-                      <Skeleton key={i} className="h-32 rounded-lg" />
+                      <Skeleton key={i} className="h-28 sm:h-32 rounded-lg" />
                     ))}
                   </div>
                 ) : slots.length > 0 ? (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
                     {slots.map((slot) => (
                       <div 
                         key={slot.id}
@@ -487,8 +496,8 @@ const Slots = () => {
                 
                 {/* Legend */}
                 <div className="mt-6 pt-6 border-t border-border">
-                  <h4 className="font-medium mb-3">Legend</h4>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <h4 className="text-sm sm:text-base font-medium mb-3">Legend</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 text-xs sm:text-sm">
                     <div className="flex items-center gap-2">
                       <div className="w-4 h-4 border-2 border-green-500 bg-green-100 dark:bg-green-900/20 rounded"></div>
                       <span>Available</span>
@@ -513,44 +522,44 @@ const Slots = () => {
 
           {/* Right Column - Booking Form */}
           <div>
-            <Card className="sticky top-4">
+            <Card className="lg:sticky lg:top-20">
               <CardHeader>
-                <CardTitle>Book Your Slot</CardTitle>
+                <CardTitle className="text-lg sm:text-xl">Book Your Slot</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-6">
+                <div className="space-y-4 sm:space-y-6">
                   <div>
-                    <h4 className="font-medium mb-2">Selected Slot</h4>
+                    <h4 className="text-sm sm:text-base font-medium mb-2">Selected Slot</h4>
                     {selectedSlot ? (
-                      <div className="border p-4 rounded-lg">
+                      <div className="border p-3 sm:p-4 rounded-lg">
                         <div className="flex items-center justify-between">
-                          <span className="font-medium">
+                          <span className="text-sm sm:text-base font-medium">
                             {slots.find(s => s.id === selectedSlot)?.number || 'N/A'}
                           </span>
-                          <Badge variant="outline">
+                          <Badge variant="outline" className="text-xs">
                             {slots.find(s => s.id === selectedSlot)?.type || 'Standard'}
                           </Badge>
                         </div>
-                        <div className="mt-2 text-sm text-muted-foreground">
+                        <div className="mt-2 text-xs sm:text-sm text-muted-foreground">
                           Floor: {slots.find(s => s.id === selectedSlot)?.floor || 'N/A'}
                         </div>
                       </div>
                     ) : (
-                      <div className="border border-dashed p-4 rounded-lg text-center text-muted-foreground">
+                      <div className="border border-dashed p-3 sm:p-4 rounded-lg text-center text-sm text-muted-foreground">
                         No slot selected
                       </div>
                     )}
                   </div>
 
-                  <div className="space-y-4">
+                  <div className="space-y-3 sm:space-y-4">
                     <div>
-                      <Label htmlFor="bookingDate">Booking Date</Label>
+                      <Label htmlFor="bookingDate" className="text-sm">Booking Date</Label>
                       <div className="relative mt-1">
                         <Calendar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                         <Input
                           id="bookingDate"
                           type="date"
-                          className="pl-10"
+                          className="pl-10 text-sm"
                           value={bookingDate}
                           onChange={(e) => setBookingDate(e.target.value)}
                           min={new Date().toISOString().split('T')[0]}
@@ -558,28 +567,28 @@ const Slots = () => {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-2 gap-3 sm:gap-4">
                       <div>
-                        <Label htmlFor="startTime">Start Time</Label>
+                        <Label htmlFor="startTime" className="text-sm">Start Time</Label>
                         <div className="relative mt-1">
-                          <Clock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                          <Clock className="absolute left-2 sm:left-3 top-1/2 h-3 w-3 sm:h-4 sm:w-4 -translate-y-1/2 text-muted-foreground" />
                           <Input
                             id="startTime"
                             type="time"
-                            className="pl-10"
+                            className="pl-8 sm:pl-10 text-sm"
                             value={startTime}
                             onChange={(e) => setStartTime(e.target.value)}
                           />
                         </div>
                       </div>
                       <div>
-                        <Label htmlFor="endTime">End Time</Label>
+                        <Label htmlFor="endTime" className="text-sm">End Time</Label>
                         <div className="relative mt-1">
-                          <Clock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                          <Clock className="absolute left-2 sm:left-3 top-1/2 h-3 w-3 sm:h-4 sm:w-4 -translate-y-1/2 text-muted-foreground" />
                           <Input
                             id="endTime"
                             type="time"
-                            className="pl-10"
+                            className="pl-8 sm:pl-10 text-sm"
                             value={endTime}
                             onChange={(e) => setEndTime(e.target.value)}
                           />
@@ -589,7 +598,7 @@ const Slots = () => {
 
                     <div className="pt-2">
                       <Button 
-                        className="w-full" 
+                        className="w-full text-sm sm:text-base" 
                         size="lg"
                         onClick={handleBooking}
                         disabled={!selectedSlot || !bookingDate || !startTime || !endTime}
@@ -603,8 +612,7 @@ const Slots = () => {
             </Card>
           </div>
         </div>
-      </div>
-    </div>
+    </PageLayout>
   );
 };
 

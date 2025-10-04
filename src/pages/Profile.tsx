@@ -9,7 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
-import Navbar from '@/components/Navbar';
+import PageLayout from '@/components/layout/PageLayout';
 import { mockUser, mockLocations } from '@/data/mockData';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
@@ -174,10 +174,20 @@ const Profile = () => {
   // Use empty array if no favorite locations
   const favoriteLocations = mockLocations;
 
+  const header = (
+    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div>
+        <h1 className="text-3xl font-bold text-foreground">My Profile</h1>
+        <p className="mt-2 text-muted-foreground">Manage your account settings and preferences</p>
+      </div>
+      <Button variant="outline" onClick={() => navigate('/login', { state: { from: '/profile' } })} className="w-full md:w-auto">
+        Sign Out
+      </Button>
+    </div>
+  );
+
   return (
-    <div className="min-h-screen bg-background">
-      <Navbar />
-      
+    <PageLayout header={header}>
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-8 text-center">
@@ -527,7 +537,7 @@ const Profile = () => {
           </TabsContent>
         </Tabs>
       </div>
-    </div>
+    </PageLayout>
   );
 };
 

@@ -7,10 +7,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, onSnapshot, query, orderBy, writeBatch } from 'firebase/firestore';
 import { db } from '@/firebase/config';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import PageLayout from '@/components/layout/PageLayout';
 import { 
   Car, 
   MapPin, 
@@ -21,6 +22,7 @@ import {
   Trash2,
   LogOut
 } from 'lucide-react';
+import { generateSlotsForLocation } from '@/utils/slotGenerator';
 
 interface Location {
   id: string;
@@ -108,13 +110,25 @@ const Admin = () => {
     e.preventDefault();
     
     try {
-      await addDoc(collection(db, 'locations'), {
+      // Create the location first
+      const locationRef = await addDoc(collection(db, 'locations'), {
         name: newLocation.name,
         address: newLocation.address,
         total_slots: Number(newLocation.total_slots),
         available_slots: Number(newLocation.total_slots),
         pricing_per_hour: Number(newLocation.pricing_per_hour),
         created_at: serverTimestamp(),
+      });
+      
+      console.log('Location created with ID:', locationRef.id);
+      
+      // Automatically generate slots based on total_slots entered
+      const totalSlots = Number(newLocation.total_slots);
+      await generateSlotsForLocation({
+        locationId: locationRef.id,
+        locationName: newLocation.name,
+        pricePerHour: Number(newLocation.pricing_per_hour),
+        numberOfSlots: totalSlots,
       });
       
       setNewLocation({
@@ -126,13 +140,16 @@ const Admin = () => {
       
       toast({
         title: 'Success',
-        description: 'Location added successfully!',
+        description: `Location and ${totalSlots} parking slots created successfully!`,
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error adding location:', error);
+      const errorMessage = error?.message || 'Failed to add location. Please try again.';
       toast({
         title: 'Error',
-        description: 'Failed to add location. Please try again.',
+        description: errorMessage.includes('permission') 
+          ? 'Permission denied. Please make sure you are logged in as admin.'
+          : errorMessage,
         variant: 'destructive',
       });
     }
@@ -228,33 +245,22 @@ const Admin = () => {
     );
   }
 
-  return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-card">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <div className="p-2 bg-primary rounded-lg">
-              <Car className="h-6 w-6 text-primary-foreground" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold">SmartPark Admin</h1>
-              <p className="text-muted-foreground">Manage locations and bookings</p>
-            </div>
-          </div>
-          <div className="flex items-center space-x-4">
-            <span className="text-sm text-muted-foreground">
-              Welcome, {currentUser?.email}
-            </span>
-            <Button onClick={handleSignOut} variant="outline" size="sm">
-              <LogOut className="h-4 w-4 mr-2" />
-              Sign Out
-            </Button>
-          </div>
-        </div>
-      </header>
+  const header = (
+    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div>
+        <h1 className="text-3xl font-bold text-foreground mb-2">SmartPark Admin</h1>
+        <p className="text-muted-foreground">Manage locations and view booking analytics</p>
+      </div>
+      <Button variant="outline" onClick={handleSignOut} className="flex items-center gap-2">
+        <LogOut className="h-4 w-4" />
+        Sign Out
+      </Button>
+    </div>
+  );
 
-      <div className="container mx-auto px-4 py-8">
+  return (
+    <PageLayout header={header}>
+      <div className="py-4">
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <Card>
@@ -352,11 +358,16 @@ const Admin = () => {
                       <Input
                         id="total_slots"
                         type="number"
+                        min="1"
+                        max="1000"
                         value={newLocation.total_slots}
                         onChange={(e) => setNewLocation({...newLocation, total_slots: e.target.value})}
-                        placeholder="100"
+                        placeholder="10"
                         required
                       />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        This many parking slots will be auto-generated (e.g., A1, A2, B1...)
+                      </p>
                     </div>
                     <div>
                       <Label htmlFor="pricing">Price per Hour ($)</Label>
@@ -496,7 +507,7 @@ const Admin = () => {
           </TabsContent>
         </Tabs>
       </div>
-    </div>
+    </PageLayout>
   );
 };
 

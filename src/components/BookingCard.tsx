@@ -9,12 +9,13 @@ interface BookingCardProps {
     id: string;
     locationName: string;
     slotId: string;
+    slotNumber?: string;
     date: string;
     startTime: string;
     endTime: string;
     duration: number;
     totalCost: number;
-    status: 'active' | 'completed' | 'cancelled';
+    status: 'active' | 'completed' | 'cancelled' | 'confirmed';
   };
   onViewDetails?: (bookingId: string) => void;
   onCancel?: (bookingId: string) => void;
@@ -22,20 +23,22 @@ interface BookingCardProps {
 
 const BookingCard = ({ booking, onViewDetails, onCancel }: BookingCardProps) => {
   const getStatusColor = () => {
-    switch (booking.status) {
+    const status = booking.status === 'confirmed' ? 'active' : booking.status;
+    switch (status) {
       case 'active':
-        return 'status-available';
+        return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400';
       case 'completed':
-        return 'bg-muted text-muted-foreground';
+        return 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400';
       case 'cancelled':
-        return 'status-booked';
+        return 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400';
       default:
-        return 'bg-muted text-muted-foreground';
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400';
     }
   };
 
   const getStatusLabel = () => {
-    switch (booking.status) {
+    const status = booking.status === 'confirmed' ? 'active' : booking.status;
+    switch (status) {
       case 'active':
         return 'Active';
       case 'completed':
@@ -43,23 +46,34 @@ const BookingCard = ({ booking, onViewDetails, onCancel }: BookingCardProps) => 
       case 'cancelled':
         return 'Cancelled';
       default:
-        return booking.status;
+        return 'Active';
     }
   };
 
+  const formatDuration = (hours: number) => {
+    if (hours < 1) {
+      const minutes = Math.round(hours * 60);
+      return `${minutes} min`;
+    }
+    return `${hours.toFixed(1)} hrs`;
+  };
+
   const bookingDate = new Date(booking.date);
-  const isUpcoming = booking.status === 'active' && bookingDate > new Date();
-  const canCancel = booking.status === 'active' && isUpcoming;
+  const actualStatus = booking.status === 'confirmed' ? 'active' : booking.status;
+  const isUpcoming = actualStatus === 'active' && bookingDate > new Date();
+  const canCancel = actualStatus === 'active' && isUpcoming;
 
   return (
     <Card className="card-hover">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
           <div className="space-y-1">
-            <h3 className="font-semibold text-lg">{booking.locationName}</h3>
+            <h3 className="font-semibold text-lg">
+              {booking.locationName === 'Unknown Location' ? 'Parking Location' : booking.locationName}
+            </h3>
             <div className="flex items-center text-sm text-muted-foreground">
               <Car className="h-4 w-4 mr-2" />
-              Slot {booking.slotId}
+              Slot {booking.slotNumber || booking.slotId}
             </div>
           </div>
           <Badge className={getStatusColor()}>
@@ -84,11 +98,11 @@ const BookingCard = ({ booking, onViewDetails, onCancel }: BookingCardProps) => 
           <div className="space-y-2">
             <div className="flex items-center">
               <span className="text-muted-foreground mr-2">Duration:</span>
-              <span className="font-medium">{booking.duration}h</span>
+              <span className="font-medium">{formatDuration(booking.duration)}</span>
             </div>
             <div className="flex items-center">
               <DollarSign className="h-4 w-4 mr-2 text-muted-foreground" />
-              <span className="font-semibold text-primary">${booking.totalCost}</span>
+              <span className="font-semibold text-primary">${booking.totalCost.toFixed(2)}</span>
             </div>
           </div>
         </div>

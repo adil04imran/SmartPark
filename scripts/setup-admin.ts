@@ -48,10 +48,11 @@ async function makeAdmin(email: string) {
     
     console.log(`✅ Successfully made ${email} an admin`);
     console.log('User ID:', user.uid);
-  } catch (error: any) {
-    console.error('❌ Error making user admin:', error.message);
-    if (error.errorInfo) {
-      console.error('Error details:', error.errorInfo);
+  } catch (error) {
+    const firebaseError = error as { message: string; errorInfo?: any };
+    console.error('❌ Error making user admin:', firebaseError.message);
+    if (firebaseError.errorInfo) {
+      console.error('Error details:', firebaseError.errorInfo);
     }
     process.exit(1);
   }

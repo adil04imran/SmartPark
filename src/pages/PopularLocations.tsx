@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { MapPin, Clock, Star, ArrowRight, Filter, Search, ChevronDown, X } from 'lucide-react';
 import { useState } from 'react';
+import PageLayout from '@/components/layout/PageLayout';
 
 type Location = {
   id: number;
@@ -170,10 +171,16 @@ export default function PopularLocations() {
     ));
   };
 
+  const header = (
+    <>
+      <h1 className="text-3xl font-bold text-foreground mb-2">Popular Parking Locations</h1>
+      <p className="text-muted-foreground">Browse our most popular parking spots in the city</p>
+    </>
+  );
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-7xl mx-auto">
-        {/* Hero Section */}
+    <PageLayout header={header}>
+      <div className="py-4">
         <div className="text-center mb-12">
           <motion.h1 
             initial={{ opacity: 0, y: -20 }}
@@ -308,7 +315,7 @@ export default function PopularLocations() {
           </div>
         </div>
 
-        {/* Locations Grid */}
+      {/* Locations Grid */}
         {filteredLocations.length > 0 ? (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {filteredLocations.map((location, index) => (
@@ -436,6 +443,6 @@ export default function PopularLocations() {
           </div>
         )}
       </div>
-    </div>
+    </PageLayout>
   );
 }
