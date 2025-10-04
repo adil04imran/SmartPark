@@ -56,12 +56,6 @@ const LocationCard = ({ location, onSelect }: LocationCardProps) => {
             <div className="flex items-center text-sm text-muted-foreground">
               <MapPin className="h-4 w-4 mr-1 flex-shrink-0" />
               <span className="truncate">{location.address}</span>
-              {location.distance && (
-                <>
-                  <span className="mx-2">•</span>
-                  <span>{location.distance} km away</span>
-                </>
-              )}
             </div>
           </div>
           <Badge variant="outline" className={color}>
@@ -74,7 +68,7 @@ const LocationCard = ({ location, onSelect }: LocationCardProps) => {
         <div className="grid grid-cols-3 gap-4 text-sm">
           <div className="flex items-center">
             <Clock className="h-4 w-4 mr-2 text-muted-foreground" />
-            <span>{location.distance}</span>
+            <span>24/7</span>
           </div>
           <div className="flex items-center">
             <DollarSign className="h-4 w-4 mr-2 text-muted-foreground" />
