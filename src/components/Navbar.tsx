@@ -199,19 +199,6 @@ const Navbar = () => {
 
 
             <div className="flex items-center gap-2">
-              {/* Find Parking Button - Desktop only */}
-              {!currentUser && (
-                <Button
-                  asChild
-                  variant="default"
-                  className="hidden lg:flex rounded-lg shadow-sm hover:shadow-md transition-all"
-                >
-                  <Link to="/locations" className="flex items-center">
-                    <MapPin className="mr-2 h-4 w-4" />
-                    <span className="font-medium">Find Parking</span>
-                  </Link>
-                </Button>
-              )}
               
               {currentUser ? (
                 <DropdownMenu>
@@ -273,22 +260,22 @@ const Navbar = () => {
                   </DropdownMenuContent>
                 </DropdownMenu>
               ) : (
-                <>
+                <div className="hidden lg:flex items-center gap-2">
                   <Button
                     variant="ghost"
                     onClick={() => navigate('/login')}
-                    className="hidden lg:flex rounded-lg"
+                    className="rounded-lg hover:bg-accent"
                   >
                     Sign In
                   </Button>
                   <Button
                     onClick={() => navigate('/register')}
-                    className="hidden lg:flex rounded-lg bg-primary hover:bg-primary/90 shadow-sm"
+                    className="rounded-lg bg-primary hover:bg-primary/90 shadow-sm"
                   >
                     Get Started
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </Button>
-                </>
+                </div>
               )}
             </div>
 

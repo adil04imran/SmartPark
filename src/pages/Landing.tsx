@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
@@ -6,18 +6,13 @@ import { ScrollIndicator } from '@/components/ui/ScrollIndicator';
 import PageLayout from '@/components/layout/PageLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import { 
-  Car,
   MapPin,
   Clock,
   Shield,
   Smartphone,
-  Star,
-  ArrowRight,
   CheckCircle,
-  BatteryCharging,
-  Navigation,
-  Zap,
-  ParkingSquare
+  Car,
+  ArrowRight
 } from 'lucide-react';
 
 const Landing = () => {
@@ -55,14 +50,9 @@ const Landing = () => {
     "Contactless entry and exit"
   ];
 
-  const [scrolled, setScrolled] = useState(false);
-
+  // Scroll handling can be added back if needed
   useEffect(() => {
-    const handleScroll = () => {
-      setScrolled(window.scrollY > 10);
-    };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    // Scroll effect logic can be added here
   }, []);
 
   const header = (
@@ -87,14 +77,16 @@ const Landing = () => {
             >
               Find Parking
             </Button>
-            <Button 
-              variant="outline"
-              size="lg"
-              className="w-full sm:w-auto px-6 sm:px-8 py-5 sm:py-6 text-sm sm:text-base font-medium"
-              onClick={() => navigate('/register')}
-            >
-              Sign Up Free
-            </Button>
+            {!currentUser && (
+              <Button 
+                variant="outline"
+                size="lg"
+                className="w-full sm:w-auto px-6 sm:px-8 py-5 sm:py-6 text-sm sm:text-base font-medium"
+                onClick={() => navigate('/register')}
+              >
+                Sign Up Free
+              </Button>
+            )}
           </div>
           
           <div className="mt-6 md:mt-8 flex items-center justify-center lg:justify-start space-x-4 sm:space-x-6">
