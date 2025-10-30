@@ -157,7 +157,6 @@ const Locations = () => {
                       total_slots: location.total_slots,
                       available_slots: location.available_slots,
                       pricing_per_hour: location.pricing_per_hour,
-                      distance: '0.5',
                       amenities: ['24/7 Access', 'Security Cameras']
                     }}
                     onSelect={handleLocationSelect}
@@ -173,37 +172,29 @@ const Locations = () => {
 
           {/* Quick Stats */}
           {filteredLocations.length > 0 && (
-            <div className="mt-6 sm:mt-8 grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-              <Card>
-                <CardContent className="p-3 sm:p-4 text-center">
-                  <div className="text-xl sm:text-2xl font-bold text-primary">{filteredLocations.length}</div>
-                  <div className="text-xs sm:text-sm text-muted-foreground">Locations Found</div>
+            <div className="mt-6 sm:mt-8 grid grid-cols-3 gap-4">
+              <Card className="h-full">
+                <CardContent className="p-4 text-center flex flex-col items-center justify-center h-full">
+                  <div className="text-2xl font-bold text-primary">{filteredLocations.length}</div>
+                  <div className="text-sm text-muted-foreground mt-1">Locations Found</div>
                 </CardContent>
               </Card>
-              <Card>
-                <CardContent className="p-3 sm:p-4 text-center">
-                  <div className="text-xl sm:text-2xl font-bold text-success">
+              <Card className="h-full">
+                <CardContent className="p-4 text-center flex flex-col items-center justify-center h-full">
+                  <div className="text-2xl font-bold text-success">
                     {filteredLocations.reduce((sum, loc) => sum + (loc.available_slots || 0), 0)}
                   </div>
-                  <div className="text-xs sm:text-sm text-muted-foreground">Available Spots</div>
+                  <div className="text-sm text-muted-foreground mt-1">Available Spots</div>
                 </CardContent>
               </Card>
-              <Card>
-                <CardContent className="p-3 sm:p-4 text-center">
-                  <div className="text-xl sm:text-2xl font-bold text-foreground">
+              <Card className="h-full">
+                <CardContent className="p-4 text-center flex flex-col items-center justify-center h-full">
+                  <div className="text-2xl font-bold text-amber-500">
                     ₹{filteredLocations.length > 0 
                       ? Math.min(...filteredLocations.map(loc => loc.pricing_per_hour || 0)).toFixed(2)
                       : '0.00'}
                   </div>
-                  <div className="text-xs sm:text-sm text-muted-foreground">Lowest Price/hr</div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-3 sm:p-4 text-center">
-                  <div className="text-xl sm:text-2xl font-bold text-foreground">
-                    {filteredLocations.length > 0 ? '0.5' : '0'}km
-                  </div>
-                  <div className="text-xs sm:text-sm text-muted-foreground">Closest Distance</div>
+                  <div className="text-sm text-muted-foreground mt-1">Lowest Price/hr</div>
                 </CardContent>
               </Card>
             </div>
