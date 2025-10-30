@@ -2,12 +2,11 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
 import LocationCard from '@/components/LocationCard';
 import PageLayout from '@/components/layout/PageLayout';
-import { Search, Map, List, SlidersHorizontal } from 'lucide-react';
+import { Search, SlidersHorizontal, Check } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '@/firebase/config';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -27,7 +26,14 @@ const Locations = () => {
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [locations, setLocations] = useState<Location[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
   const navigate = useNavigate();
+
+  const filterOptions = [
+    { id: 'all', label: 'All Locations' },
+    { id: 'available', label: 'Good Availability' },
+    { id: 'limited', label: 'Limited Spots' }
+  ];
 
   // Fetch locations from Firestore
   useEffect(() => {
@@ -98,133 +104,72 @@ const Locations = () => {
                   className="pl-10 text-sm sm:text-base"
                 />
               </div>
-              <Button variant="outline" className="w-full sm:w-auto">
-                <SlidersHorizontal className="h-4 w-4 mr-2" />
-                More Filters
-              </Button>
-            </div>
-
-            {/* Quick Filters */}
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant={selectedFilter === 'all' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setSelectedFilter('all')}
-              >
-                All Locations
-              </Button>
-              <Button
-                variant={selectedFilter === 'available' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setSelectedFilter('available')}
-              >
-                Good Availability
-              </Button>
-              <Button
-                variant={selectedFilter === 'limited' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setSelectedFilter('limited')}
-              >
-                Limited Spots
-              </Button>
+              <DropdownMenu open={isFilterOpen} onOpenChange={setIsFilterOpen}>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="w-full sm:w-auto">
+                    <SlidersHorizontal className="h-4 w-4 mr-2" />
+                    More Filters
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  {filterOptions.map((option) => (
+                    <DropdownMenuItem 
+                      key={option.id}
+                      onClick={() => setSelectedFilter(option.id)}
+                      className="flex items-center justify-between cursor-pointer"
+                    >
+                      <span>{option.label}</span>
+                      {selectedFilter === option.id && <Check className="h-4 w-4" />}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
 
           {/* Results */}
-          <Tabs defaultValue="list" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 max-w-md">
-              <TabsTrigger value="list" className="flex items-center gap-2 text-xs sm:text-sm">
-                <List className="h-3 w-3 sm:h-4 sm:w-4" />
-                <span className="hidden sm:inline">List View</span>
-                <span className="sm:hidden">List</span>
-              </TabsTrigger>
-              <TabsTrigger value="map" className="flex items-center gap-2 text-xs sm:text-sm">
-                <Map className="h-3 w-3 sm:h-4 sm:w-4" />
-                <span className="hidden sm:inline">Map View</span>
-                <span className="sm:hidden">Map</span>
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="list" className="mt-4 sm:mt-6">
-              {loading ? (
-                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-                  {[1, 2, 3].map((i) => (
-                    <Card key={i}>
-                      <CardContent className="p-6">
-                        <Skeleton className="h-6 w-3/4 mb-4" />
-                        <Skeleton className="h-4 w-full mb-2" />
-                        <Skeleton className="h-4 w-1/2 mb-4" />
-                        <div className="flex justify-between items-center">
-                          <Skeleton className="h-4 w-16" />
-                          <Skeleton className="h-9 w-24" />
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              ) : filteredLocations.length > 0 ? (
-                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-                  {filteredLocations.map((location) => (location && (
-                    <LocationCard
-                      key={location.id}
-                      location={{
-                        id: location.id,
-                        name: location.name,
-                        address: location.address,
-                        total_slots: location.total_slots,
-                        available_slots: location.available_slots,
-                        pricing_per_hour: location.pricing_per_hour,
-                        distance: '0.5',
-                        amenities: ['24/7 Access', 'Security Cameras']
-                      }}
-                      onSelect={handleLocationSelect}
-                    />
-                  )))}
-                </div>
-              ) : (
-                <div className="text-center py-12">
-                  <p className="text-muted-foreground">No parking locations found matching your criteria.</p>
-                </div>
-              )}
-            </TabsContent>
-
-            <TabsContent value="map" className="mt-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Map className="h-5 w-5" />
-                    Map View
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-96 bg-muted rounded-lg flex items-center justify-center">
-                    <div className="text-center text-muted-foreground">
-                      <Map className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                      <p className="text-lg font-medium">Interactive Map</p>
-                      <p className="text-sm">Google Maps integration would appear here</p>
-                      <p className="text-xs mt-2">Showing {filteredLocations.length} locations</p>
-                    </div>
-                  </div>
-                  
-                  {/* Map Legend */}
-                  <div className="mt-4 flex flex-wrap gap-4 text-sm">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-success rounded-full"></div>
-                      <span>Good Availability (10+ spots)</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-warning rounded-full"></div>
-                      <span>Limited Spots (1-9 spots)</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-destructive rounded-full"></div>
-                      <span>Full</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
+          <div className="w-full mt-4 sm:mt-6">
+            {loading ? (
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+                {[1, 2, 3].map((i) => (
+                  <Card key={i}>
+                    <CardContent className="p-6">
+                      <Skeleton className="h-6 w-3/4 mb-4" />
+                      <Skeleton className="h-4 w-full mb-2" />
+                      <Skeleton className="h-4 w-1/2 mb-4" />
+                      <div className="flex justify-between items-center">
+                        <Skeleton className="h-4 w-16" />
+                        <Skeleton className="h-9 w-24" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : filteredLocations.length > 0 ? (
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+                {filteredLocations.map((location) => (location && (
+                  <LocationCard
+                    key={location.id}
+                    location={{
+                      id: location.id,
+                      name: location.name,
+                      address: location.address,
+                      total_slots: location.total_slots,
+                      available_slots: location.available_slots,
+                      pricing_per_hour: location.pricing_per_hour,
+                      distance: '0.5',
+                      amenities: ['24/7 Access', 'Security Cameras']
+                    }}
+                    onSelect={handleLocationSelect}
+                  />
+                )))}
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <p className="text-muted-foreground">No parking locations found matching your criteria.</p>
+              </div>
+            )}
+          </div>
 
           {/* Quick Stats */}
           {filteredLocations.length > 0 && (

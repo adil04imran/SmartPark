@@ -17,11 +17,10 @@ interface BookingCardProps {
     totalCost: number;
     status: 'active' | 'completed' | 'cancelled' | 'confirmed';
   };
-  onViewDetails?: (bookingId: string) => void;
   onCancel?: (bookingId: string) => void;
 }
 
-const BookingCard = ({ booking, onViewDetails, onCancel }: BookingCardProps) => {
+const BookingCard = ({ booking, onCancel }: BookingCardProps) => {
   const getStatusColor = () => {
     const status = booking.status === 'confirmed' ? 'active' : booking.status;
     switch (status) {
@@ -108,31 +107,23 @@ const BookingCard = ({ booking, onViewDetails, onCancel }: BookingCardProps) => 
         </div>
 
         <div className="pt-4 border-t border-border">
-          <div className="flex gap-2">
-            {onViewDetails && (
+          {onCancel && (
+            <div className="flex justify-end pt-4">
               <Button 
                 variant="outline" 
                 size="sm" 
-                onClick={() => onViewDetails(booking.id)}
-                className="flex-1"
-              >
-                View Details
-              </Button>
-            )}
-            {canCancel && onCancel && (
-              <Button 
-                variant="destructive" 
-                size="sm" 
                 onClick={() => onCancel(booking.id)}
+                disabled={!canCancel}
+                className="w-full"
               >
-                Cancel
+                Cancel Booking
               </Button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>
-  );
-};
+    );
+  };
 
-export default BookingCard;
+  export default BookingCard;

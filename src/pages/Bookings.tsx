@@ -7,10 +7,21 @@ import { Badge } from '@/components/ui/badge';
 import BookingCard from '@/components/BookingCard';
 import PageLayout from '@/components/layout/PageLayout';
 import { useToast } from '@/hooks/use-toast';
-import { Search, Calendar, Filter, Plus } from 'lucide-react';
+import { Search, Calendar, Filter, Plus, Check, X } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { collection, query, where, onSnapshot, orderBy, doc, updateDoc } from 'firebase/firestore';
+import { 
+  collection, 
+  query, 
+  where, 
+  onSnapshot, 
+  orderBy, 
+  doc, 
+  updateDoc, 
+  getDoc, 
+  writeBatch 
+} from 'firebase/firestore';
 import { db } from '@/firebase/config';
 
 const Bookings = () => {
@@ -18,6 +29,13 @@ const Bookings = () => {
   const [activeTab, setActiveTab] = useState('all');
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filters, setFilters] = useState<{
+    status: string[];
+    dateRange: { from: string; to: string } | null;
+  }>({
+    status: [],
+    dateRange: null
+  });
   const navigate = useNavigate();
   const { toast } = useToast();
   const { currentUser } = useAuth();
@@ -67,46 +85,107 @@ const Bookings = () => {
     return () => unsubscribe();
   }, [currentUser, toast]);
 
-  // Filter bookings based on search and tab
-  const filteredBookings = bookings.filter(booking => {
-    const matchesSearch = booking.locationName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         booking.id.toLowerCase().includes(searchTerm.toLowerCase());
-
-    if (activeTab === 'active') {
-      return matchesSearch && booking.status === 'active';
-    } else if (activeTab === 'completed') {
-      return matchesSearch && booking.status === 'completed';
-    } else if (activeTab === 'cancelled') {
-      return matchesSearch && booking.status === 'cancelled';
-    }
-    
-    return matchesSearch;
-  });
-
-  const handleViewDetails = (bookingId: string) => {
-    toast({
-      title: "View Details",
-      description: `Viewing details for booking ${bookingId}`,
+  // Toggle filter
+  const toggleFilter = (filterType: 'status', value: string) => {
+    setFilters(prev => {
+      const currentFilters = [...prev[filterType]];
+      const valueIndex = currentFilters.indexOf(value);
+      
+      if (valueIndex === -1) {
+        currentFilters.push(value);
+      } else {
+        currentFilters.splice(valueIndex, 1);
+      }
+      
+      return {
+        ...prev,
+        [filterType]: currentFilters
+      };
     });
   };
 
+  // Clear all filters
+  const clearFilters = () => {
+    setFilters({
+      status: [],
+      dateRange: null
+    });
+  };
+
+  // Filter bookings based on search, tab, and filters
+  const filteredBookings = bookings.filter(booking => {
+    // Search filter
+    const matchesSearch = searchTerm === '' || 
+      booking.locationName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      booking.id.toLowerCase().includes(searchTerm.toLowerCase());
+
+    // Tab filter
+    const matchesTab = activeTab === 'all' || booking.status === activeTab;
+
+    // Status filter
+    const matchesStatus = filters.status.length === 0 || 
+      filters.status.includes(booking.status);
+
+    // Date range filter
+    const matchesDateRange = !filters.dateRange || (
+      booking.date >= filters.dateRange.from && 
+      booking.date <= (filters.dateRange.to || filters.dateRange.from)
+    );
+    
+    return matchesSearch && matchesTab && matchesStatus && matchesDateRange;
+  });
+
+  // Check if any filters are active
+  const hasActiveFilters = filters.status.length > 0 || filters.dateRange !== null;
+
   const handleCancelBooking = async (bookingId: string) => {
     try {
+      // Get the booking document first to get the slot ID
+      const bookingDoc = await getDoc(doc(db, 'bookings', bookingId));
+      if (!bookingDoc.exists()) {
+        throw new Error('Booking not found');
+      }
+      
+      const bookingData = bookingDoc.data();
+      const slotId = bookingData.slotId || bookingData.slot_id;
+      
+      if (!slotId) {
+        throw new Error('Slot ID not found in booking');
+      }
+      
+      // Start a batch to update both documents atomically
+      const batch = writeBatch(db);
+      
+      // Update booking status to cancelled
       const bookingRef = doc(db, 'bookings', bookingId);
-      await updateDoc(bookingRef, {
+      batch.update(bookingRef, {
         status: 'cancelled',
         updatedAt: new Date().toISOString(),
       });
       
+      // Update slot status to available
+      const slotRef = doc(db, 'slots', slotId);
+      batch.update(slotRef, {
+        status: 'available',
+        isAvailable: true,
+        is_available: true,
+        updatedAt: new Date().toISOString(),
+      });
+      
+      // Commit the batch
+      await batch.commit();
+      
       toast({
         title: "Booking Cancelled",
-        description: `Booking has been cancelled successfully.`,
+        description: "Your booking has been cancelled and the slot is now available.",
       });
+      
+      console.log(`Booking ${bookingId} cancelled and slot ${slotId} released`);
     } catch (error) {
       console.error('Error cancelling booking:', error);
       toast({
         title: "Error",
-        description: "Failed to cancel booking. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to cancel booking. Please try again.",
         variant: 'destructive',
       });
     }
@@ -178,11 +257,103 @@ const Bookings = () => {
                 className="pl-10 text-sm sm:text-base"
               />
             </div>
-            <Button variant="outline" className="w-full sm:w-auto">
-              <Filter className="h-4 w-4 mr-2" />
-              Filter
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="w-full sm:w-auto relative">
+                  <Filter className="h-4 w-4 mr-2" />
+                  Filter
+                  {hasActiveFilters && (
+                    <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-primary"></span>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-56" align="end">
+                <div className="px-2 py-1.5 text-sm font-semibold">Status</div>
+                <DropdownMenuItem 
+                  onSelect={(e) => { e.preventDefault(); toggleFilter('status', 'active'); }}
+                  className="cursor-pointer"
+                >
+                  <div className="flex items-center w-full">
+                    <div className={`h-4 w-4 border rounded mr-2 flex items-center justify-center ${filters.status.includes('active') ? 'bg-primary border-primary' : 'border-muted-foreground'}`}>
+                      {filters.status.includes('active') && <Check className="h-3 w-3 text-primary-foreground" />}
+                    </div>
+                    <span>Active</span>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onSelect={(e) => { e.preventDefault(); toggleFilter('status', 'completed'); }}
+                  className="cursor-pointer"
+                >
+                  <div className="flex items-center w-full">
+                    <div className={`h-4 w-4 border rounded mr-2 flex items-center justify-center ${filters.status.includes('completed') ? 'bg-primary border-primary' : 'border-muted-foreground'}`}>
+                      {filters.status.includes('completed') && <Check className="h-3 w-3 text-primary-foreground" />}
+                    </div>
+                    <span>Completed</span>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onSelect={(e) => { e.preventDefault(); toggleFilter('status', 'cancelled'); }}
+                  className="cursor-pointer"
+                >
+                  <div className="flex items-center w-full">
+                    <div className={`h-4 w-4 border rounded mr-2 flex items-center justify-center ${filters.status.includes('cancelled') ? 'bg-primary border-primary' : 'border-muted-foreground'}`}>
+                      {filters.status.includes('cancelled') && <Check className="h-3 w-3 text-primary-foreground" />}
+                    </div>
+                    <span>Cancelled</span>
+                  </div>
+                </DropdownMenuItem>
+                {hasActiveFilters && (
+                  <>
+                    <div className="h-px bg-border my-1" />
+                    <DropdownMenuItem 
+                      onSelect={(e) => { e.preventDefault(); clearFilters(); }}
+                      className="cursor-pointer text-destructive"
+                    >
+                      <X className="h-4 w-4 mr-2" />
+                      Clear all filters
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
+
+          {/* Active Filters */}
+          {hasActiveFilters && (
+            <div className="flex flex-wrap gap-2 mb-4">
+              {filters.status.map(status => (
+                <Badge key={status} variant="secondary" className="gap-1">
+                  {status.charAt(0).toUpperCase() + status.slice(1)}
+                  <button 
+                    onClick={() => toggleFilter('status', status)}
+                    className="ml-1 rounded-full hover:bg-accent p-0.5"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              ))}
+              {filters.dateRange && (
+                <Badge variant="secondary" className="gap-1">
+                  {new Date(filters.dateRange.from).toLocaleDateString()}
+                  {filters.dateRange.to && ` - ${new Date(filters.dateRange.to).toLocaleDateString()}`}
+                  <button 
+                    onClick={() => setFilters(prev => ({ ...prev, dateRange: null }))}
+                    className="ml-1 rounded-full hover:bg-accent p-0.5"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </Badge>
+              )}
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={clearFilters}
+                className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+              >
+                Clear all
+              </Button>
+            </div>
+          )}
 
           {/* Stats Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
@@ -231,7 +402,6 @@ const Bookings = () => {
             <TabsContent value="all" className="mt-4 sm:mt-6">
               <BookingsList 
                 bookings={filteredBookings}
-                onViewDetails={handleViewDetails}
                 onCancel={handleCancelBooking}
                 emptyMessage="No bookings found"
               />
@@ -240,7 +410,6 @@ const Bookings = () => {
             <TabsContent value="active" className="mt-4 sm:mt-6">
               <BookingsList 
                 bookings={filteredBookings}
-                onViewDetails={handleViewDetails}
                 onCancel={handleCancelBooking}
                 emptyMessage="No active bookings"
               />
@@ -249,7 +418,6 @@ const Bookings = () => {
             <TabsContent value="completed" className="mt-4 sm:mt-6">
               <BookingsList 
                 bookings={filteredBookings}
-                onViewDetails={handleViewDetails}
                 onCancel={handleCancelBooking}
                 emptyMessage="No completed bookings"
               />
@@ -258,7 +426,6 @@ const Bookings = () => {
             <TabsContent value="cancelled" className="mt-4 sm:mt-6">
               <BookingsList 
                 bookings={filteredBookings}
-                onViewDetails={handleViewDetails}
                 onCancel={handleCancelBooking}
                 emptyMessage="No cancelled bookings"
               />
@@ -284,12 +451,11 @@ interface Booking {
 
 interface BookingsListProps {
   bookings: Booking[];
-  onViewDetails: (bookingId: string) => void;
   onCancel: (bookingId: string) => void;
   emptyMessage: string;
 }
 
-const BookingsList = ({ bookings, onViewDetails, onCancel, emptyMessage }: BookingsListProps) => {
+const BookingsList = ({ bookings, onCancel, emptyMessage }: Omit<BookingsListProps, 'onViewDetails'>) => {
   if (bookings.length === 0) {
     return (
       <div className="text-center py-12">
@@ -304,7 +470,6 @@ const BookingsList = ({ bookings, onViewDetails, onCancel, emptyMessage }: Booki
         <BookingCard
           key={booking.id}
           booking={booking}
-          onViewDetails={onViewDetails}
           onCancel={onCancel}
         />
       ))}

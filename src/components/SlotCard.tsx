@@ -48,16 +48,11 @@ const SlotCard = ({ slot, isSelected = false, onSelect }: SlotCardProps) => {
   };
 
   const getTypeLabel = () => {
-    switch (slot.type) {
-      case 'electric':
-        return 'Electric';
-      case 'handicap':
-        return 'Accessible';
-      case 'compact':
-        return 'Compact';
-      default:
-        return 'Standard';
+    // Only show label for electric slots
+    if (slot.type === 'electric') {
+      return 'Electric';
     }
+    return ''; // Return empty string for all other slot types
   };
 
   // Ensure status has a default value of 'available' if undefined

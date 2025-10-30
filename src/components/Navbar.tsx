@@ -197,19 +197,6 @@ const Navbar = () => {
               ))}
             </nav>
 
-            {/* Notification Button - Desktop only */}
-            {currentUser && (
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="hidden lg:flex rounded-lg relative mr-2"
-                onClick={() => navigate('/bookings')}
-              >
-                <Bell className="h-5 w-5" />
-                <span className="sr-only">Notifications</span>
-                <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-background"></span>
-              </Button>
-            )}
 
             <div className="flex items-center gap-2">
               {/* Find Parking Button - Desktop only */}

@@ -13,6 +13,7 @@ import {
   writeBatch,
   serverTimestamp
 } from 'firebase/firestore';
+import { BookingQRCode } from '@/components/BookingQRCode';
 import { createBookingWithEndTime } from '@/utils/bookingManager';
 import { auth, db } from '@/firebase/config';
 import { useToast } from '@/hooks/use-toast';
@@ -23,19 +24,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import SlotCard from '@/components/SlotCard';
 // Navbar is now handled by PageLayout
 import { 
   ArrowLeft, 
-  MapPin, 
   Clock, 
-  DollarSign, 
-  Calendar,
-  Star,
-  Zap,
-  Shield
+  Calendar
 } from 'lucide-react';
 import PageLayout from '@/components/layout/PageLayout';
 
@@ -58,6 +53,14 @@ interface Slot {
   pricePerHour: number;
   floor?: number;
   isMovieThemed?: boolean;
+  isElectric?: boolean;
+  is_electric?: boolean;
+  slotType?: string;
+  slotNumber?: string;
+  location_id?: string;
+  location_name?: string;
+  price_per_hour?: number;
+  is_available?: boolean;
   createdAt?: any;
   updatedAt?: any;
 }
@@ -74,6 +77,13 @@ const Slots = () => {
   const [bookingDate, setBookingDate] = useState('');
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
+  const [currentBooking, setCurrentBooking] = useState<{
+    id: string;
+    slotNumber: string;
+    locationName: string;
+    startTime: string;
+    endTime: string;
+  } | null>(null);
 
   // Function to check and release expired bookings
   const checkAndReleaseExpiredSlots = async () => {
@@ -172,7 +182,7 @@ const Slots = () => {
 
   // Function to fetch and process slots
   const fetchSlots = async () => {
-    if (!locationId) return;
+    if (!locationId) return [];
     
     try {
       const slotsQuery = query(
@@ -181,11 +191,43 @@ const Slots = () => {
       );
       
       const querySnapshot = await getDocs(slotsQuery);
-      const slotsData = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Slot[];
+      const slotsData = querySnapshot.docs.map(doc => {
+        const data = doc.data();
+        const slotType = data.type || data.slotType || 'standard';
+        const isElectric = data.isElectric || data.is_electric || slotType === 'electric';
+        const slotNumber = data.number || data.slotNumber || doc.id;
+        const pricePerHour = data.pricePerHour || data.price_per_hour || 0;
+        const locationId = data.locationId || data.location_id || '';
+        
+        // Log each slot's data for debugging
+        console.log('Fetched slot:', {
+          id: doc.id,
+          type: slotType,
+          isElectric,
+          number: slotNumber,
+          pricePerHour,
+          locationId,
+          status: data.status || 'available'
+        });
+        
+        return {
+          id: doc.id,
+          type: slotType,
+          isElectric,
+          number: slotNumber,
+          pricePerHour,
+          locationId,
+          status: data.status || 'available',
+          floor: data.floor,
+          isMovieThemed: data.isMovieThemed,
+          createdAt: data.createdAt,
+          updatedAt: data.updatedAt,
+          // Include all other fields for backward compatibility
+          ...data
+        } as Slot;
+      });
       
+      console.log('All slots data:', slotsData);
       setSlots(slotsData);
       return slotsData;
     } catch (error) {
@@ -387,23 +429,25 @@ const Slots = () => {
         updatedAt: serverTimestamp()
       });
 
-      toast({
-        title: 'Booking confirmed!',
-        description: `Your booking for slot ${selectedSlotData.number} has been confirmed.`,
+      // Set current booking to show QR code
+      setCurrentBooking({
+        id: docRef.id,
+        slotNumber: selectedSlotData.number,
+        locationName: location?.name || 'Unknown Location',
+        startTime: bookingData.startTime,
+        endTime: bookingData.endTime
       });
 
-      // Reset form
-      setSelectedSlot(null);
-      setBookingDate('');
-      setStartTime('');
-      setEndTime('');
+      toast({
+        title: 'Booking confirmed!',
+        description: 'Your parking spot has been reserved. Show the QR code at the entrance.',
+      });
 
     } catch (error) {
       console.error('Error creating booking:', error);
       toast({
         title: 'Booking failed',
         description: 'There was an error processing your booking. Please try again.',
-        variant: 'destructive',
       });
     }
   };
@@ -430,6 +474,61 @@ const Slots = () => {
 
   const availableSlots = slots.filter(s => s.status === 'available').length;
 
+  // Show QR code if there's a current booking
+  if (currentBooking) {
+    return (
+      <PageLayout className="max-w-4xl mx-auto py-8">
+        <div className="flex flex-col items-center space-y-6 bg-white p-6 rounded-lg shadow-md">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-foreground mb-2">Booking Confirmed! 🎉</h1>
+            <p className="text-muted-foreground">Your parking spot is reserved. Show this QR code at the entrance.</p>
+          </div>
+          
+          <div className="w-full max-w-xs">
+            <BookingQRCode
+              bookingId={currentBooking.id}
+              bookingData={{
+                locationName: currentBooking.locationName,
+                slotNumber: currentBooking.slotNumber,
+                startTime: currentBooking.startTime,
+                endTime: currentBooking.endTime,
+                vehicleNumber: 'Not specified',
+              }}
+            />
+          </div>
+          
+          <div className="flex flex-col sm:flex-row gap-4 w-full max-w-xs">
+            <Button 
+              variant="outline" 
+              className="w-full"
+              onClick={() => {
+                setCurrentBooking(null);
+                setSelectedSlot(null);
+                setBookingDate('');
+                setStartTime('');
+                setEndTime('');
+              }}
+            >
+              Book Another Slot
+            </Button>
+            <Button 
+              className="w-full bg-blue-600 hover:bg-blue-700"
+              onClick={() => navigate('/bookings')}
+            >
+              View My Bookings
+            </Button>
+          </div>
+          
+          <div className="mt-4 text-sm text-gray-500 text-center">
+            <p>Show this QR code at the parking entrance for access</p>
+            <p>or save it to your device for offline access</p>
+          </div>
+        </div>
+      </PageLayout>
+    );
+  }
+
+  // Normal slots view
   return (
     <PageLayout>
       <Button 
@@ -497,22 +596,14 @@ const Slots = () => {
                 {/* Legend */}
                 <div className="mt-6 pt-6 border-t border-border">
                   <h4 className="text-sm sm:text-base font-medium mb-3">Legend</h4>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 text-xs sm:text-sm">
+                  <div className="grid grid-cols-2 gap-3 sm:gap-4 text-xs sm:text-sm">
                     <div className="flex items-center gap-2">
                       <div className="w-4 h-4 border-2 border-green-500 bg-green-100 dark:bg-green-900/20 rounded"></div>
                       <span>Available</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 border-2 border-yellow-500 bg-yellow-100 dark:bg-yellow-900/20 rounded"></div>
-                      <span>Reserved</span>
-                    </div>
-                    <div className="flex items-center gap-2">
                       <div className="w-4 h-4 border-2 border-red-500 bg-red-100 dark:bg-red-900/20 rounded"></div>
-                      <span>Occupied</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 border-2 border-primary bg-primary/10 rounded"></div>
-                      <span>Selected</span>
+                      <span>Occupied/Booked</span>
                     </div>
                   </div>
                 </div>

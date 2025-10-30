@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/components/AuthGuard';
 import { useToast } from '@/hooks/use-toast';
@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { collection, query, orderBy, onSnapshot, doc, updateDoc, deleteDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, getDocs, updateDoc, doc, deleteDoc, onSnapshot, query, where, orderBy, serverTimestamp, writeBatch } from 'firebase/firestore';
 import { db } from '@/firebase/config';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -30,151 +30,347 @@ interface Location {
   address: string;
   total_slots: number;
   available_slots: number;
-  pricing_per_hour: number;
-  created_at: string;
+  pricing_per_hour?: number;
+  created_at?: any;
 }
 
 interface Booking {
   id: string;
-  start_time: string;
-  end_time: string;
+  start_time: Date | null;
+  end_time: Date | null;
+  formatted_start_time: string;
+  formatted_end_time: string;
   total_amount: number;
   status: string;
-  profiles: {
-    full_name: string;
-  };
-  locations: {
-    name: string;
-  };
+  user_name: string;
+  location_name: string;
+  userEmail: string;
+  locationId: string;
 }
 
 const Admin = () => {
+  const { signOut } = useAuth();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  
+  // State management
   const [locations, setLocations] = useState<Location[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
+  const [totalRevenue, setTotalRevenue] = useState(0);
   const [editingLocation, setEditingLocation] = useState<Location | null>(null);
   const [newLocation, setNewLocation] = useState({
     name: '',
     address: '',
     total_slots: '',
+    electric_slots: '0',
     pricing_per_hour: ''
   });
-  const { signOut } = useAuth();
-  const { toast } = useToast();
-  const navigate = useNavigate();
 
-  // Set up real-time listeners
-  useEffect(() => {
-    // Locations listener
-    const locationsQuery = query(collection(db, 'locations'), orderBy('created_at', 'desc'));
-    const unsubscribeLocations = onSnapshot(locationsQuery, (snapshot) => {
-      const locationsData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        name: doc.data().name || '',
-        address: doc.data().address || '',
-        total_slots: doc.data().total_slots || 0,
-        available_slots: doc.data().available_slots || 0,
-        pricing_per_hour: doc.data().pricing_per_hour || 0,
-        created_at: doc.data().created_at || ''
-      })) as Location[];
-      setLocations(locationsData);
-      setLoading(false);
-    });
+  // Format date helper function
+  const formatDate = useCallback((date: Date | null): string => {
+    if (!date) return 'N/A';
+    try {
+      return date.toLocaleString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+    } catch (e) {
+      console.error('Error formatting date:', date, e);
+      return 'Invalid Date';
+    }
+  }, []);
 
-    // Bookings listener with error handling
-    const bookingsQuery = query(collection(db, 'bookings'));
-    const unsubscribeBookings = onSnapshot(
-      bookingsQuery,
-      (snapshot) => {
-        const bookingsData = snapshot.docs.map(doc => {
-          const data = doc.data();
-          // Safely parse total_amount, defaulting to 0 if invalid
-          let totalAmount = 0;
-          try {
-            totalAmount = typeof data.total_amount === 'number' 
-              ? data.total_amount 
-              : parseFloat(data.total_amount) || 0;
-          } catch (e) {
-            console.warn(`Invalid total_amount for booking ${doc.id}:`, data.total_amount);
-          }
-          
-          return {
-            id: doc.id,
-            start_time: data.start_time || '',
-            end_time: data.end_time || '',
-            total_amount: totalAmount,
-            status: data.status || 'pending',
-            profiles: {
-              full_name: data.user_name || data.profiles?.full_name || 'User'
-            },
-            locations: {
-              name: data.location_name || data.locations?.name || 'Location'
-            },
-          } as Booking;
+  // Helper function to check if bookings collection exists and has data
+  const checkBookingsCollection = async () => {
+    try {
+      const snapshot = await getDocs(collection(db, 'bookings'));
+      console.log('Bookings collection exists with', snapshot.size, 'documents');
+      if (snapshot.size === 0) {
+        console.log('No bookings found in the collection');
+      } else {
+        snapshot.forEach((doc: { id: string; data: () => DocumentData }) => {
+          console.log('Document data:', doc.id, doc.data());
         });
-        setBookings(bookingsData);
+      }
+    } catch (error) {
+      console.error('Error checking bookings collection:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to access bookings. Please check your connection and refresh.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  useEffect(() => {
+    setLoading(true);
+    
+    // Check bookings collection on initial load
+    checkBookingsCollection();
+
+    // Subscribe to locations
+    const locationsQuery = query(collection(db, 'locations'), orderBy('name'));
+    const unsubscribeLocations = onSnapshot(
+      locationsQuery,
+      (snapshot) => {
+        const locationsData = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        } as Location));
+        setLocations(locationsData);
       },
       (error) => {
-        console.error('Error in bookings listener:', error);
+        console.error('Error in locations listener:', error);
         toast({
           title: 'Error',
-          description: 'Failed to load bookings. Please refresh the page.',
+          description: 'Failed to load locations. Please refresh the page.',
           variant: 'destructive',
         });
       }
     );
 
+    // Subscribe to bookings with proper timestamp handling and data mapping
+    const unsubscribeBookings = onSnapshot(
+      query(collection(db, 'bookings'), orderBy('createdAt', 'desc')),
+      (snapshot) => {
+        console.log('Received', snapshot.size, 'bookings from Firestore');
+        
+        const bookingsData = snapshot.docs.map((doc) => {
+          const data = doc.data();
+          console.log('Processing booking:', { id: doc.id, ...data });
+          
+          // Parse timestamps
+          const startTime = data.startTimestamp?.toDate?.() || 
+                           (data.startTime ? new Date(`${data.date}T${data.startTime}`) : null);
+          
+          const endTime = data.endTimestamp?.toDate?.() || 
+                         (data.endTime ? new Date(`${data.date}T${data.endTime}`) : null);
+
+          return {
+            id: doc.id,
+            start_time: startTime,
+            end_time: endTime,
+            formatted_start_time: startTime ? formatDate(startTime) : 'N/A',
+            formatted_end_time: endTime ? formatDate(endTime) : 'N/A',
+            total_amount: data.totalPrice || 0,
+            status: data.status || 'pending',
+            user_name: data.userName || 'User',
+            location_name: data.locationName || 'Location',
+            userEmail: data.userEmail || '',
+            locationId: data.locationId || '',
+            slotId: data.slotId || '',
+            slotNumber: data.slotNumber || '',
+            date: data.date || ''
+          } as Booking;
+        });
+        
+        console.log('Processed bookings:', bookingsData);
+        setBookings(bookingsData);
+        
+        // Calculate total revenue
+        const revenue = bookingsData.reduce((sum, booking) => sum + (booking.total_amount || 0), 0);
+        setTotalRevenue(revenue);
+        
+        setLoading(false);
+      },
+      (error) => {
+        console.error('Error in bookings listener:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to load bookings. ' + 
+            (error.code === 'permission-denied' 
+              ? 'Permission denied. Please sign in again.' 
+              : 'Please check your connection and refresh.'),
+          variant: 'destructive',
+        });
+        setLoading(false);
+      }
+    );
+
     // Cleanup function to unsubscribe from listeners
     return () => {
-      unsubscribeLocations();
-      unsubscribeBookings();
+      try {
+        if (typeof unsubscribeLocations === 'function') {
+          unsubscribeLocations();
+        }
+        if (typeof unsubscribeBookings === 'function') {
+          unsubscribeBookings();
+        }
+      } catch (e) {
+        console.error('Error during cleanup:', e);
+      }
     };
-  }, [toast]);
+  }, [formatDate, toast]);
+
+  // Debug useEffect to log all bookings
+  useEffect(() => {
+    const fetchBookings = async () => {
+      try {
+        const snapshot = await getDocs(collection(db, 'bookings'));
+        console.log('All booking documents:');
+        snapshot.forEach((doc) => {
+          console.log('Document ID:', doc.id, 'Data:', doc.data());
+        });
+      } catch (error) {
+        console.error('Error fetching bookings:', error);
+      }
+    };
+    
+    fetchBookings();
+  }, []);
+
+  // Add a test booking function for debugging
+  // This function is exposed to the window object for testing
+  // You can call it from the browser console using: window.addTestBooking()
+  const addTestBooking = async () => {
+    try {
+      const newBooking = {
+        start_time: serverTimestamp(),
+        end_time: new Date(Date.now() + 3600000), // 1 hour from now
+        total_amount: 15.99,
+        status: 'active',
+        user_name: 'Test User',
+        location_name: 'Test Location',
+        userEmail: 'test@example.com',
+        locationId: 'test-location-123',
+        created_at: serverTimestamp()
+      };
+      
+      const docRef = await addDoc(collection(db, 'bookings'), newBooking);
+      console.log('Test booking added with ID:', docRef.id);
+      
+      toast({
+        title: 'Success',
+        description: 'Test booking added successfully!',
+      });
+    } catch (error) {
+      console.error('Error adding test booking:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to add test booking: ' + (error as Error).message,
+        variant: 'destructive',
+      });
+    }
+  };
 
   const handleAddLocation = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    const totalSlots = Number(newLocation.total_slots);
+    const electricSlots = Number(newLocation.electric_slots) || 0;
+    
+    if (electricSlots > totalSlots) {
+      toast({
+        title: 'Error',
+        description: 'Number of electric slots cannot exceed total number of slots',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
     try {
-      // Create the location first
+      // First, create the location
       const locationRef = await addDoc(collection(db, 'locations'), {
         name: newLocation.name,
         address: newLocation.address,
-        total_slots: Number(newLocation.total_slots),
-        available_slots: Number(newLocation.total_slots),
+        total_slots: totalSlots,
+        electric_slots: electricSlots,
+        available_slots: totalSlots,
         pricing_per_hour: Number(newLocation.pricing_per_hour),
         created_at: serverTimestamp(),
       });
+
+      // Create slots for the location
+      const batch = writeBatch(db);
+      const slotsRef = collection(db, 'slots');
       
-      console.log('Location created with ID:', locationRef.id);
+      // Determine how many slots per floor (assuming 10 slots per floor)
+      const slotsPerFloor = 10;
+      const totalFloors = Math.ceil(totalSlots / slotsPerFloor);
       
-      // Automatically generate slots based on total_slots entered
-      const totalSlots = Number(newLocation.total_slots);
-      await generateSlotsForLocation({
-        locationId: locationRef.id,
-        locationName: newLocation.name,
-        pricePerHour: Number(newLocation.pricing_per_hour),
-        numberOfSlots: totalSlots,
-      });
+      let slotCount = 1;
+      let electricSlotsAssigned = 0;
       
+      // Create slots for each floor
+      for (let floor = 1; floor <= totalFloors; floor++) {
+        const slotsThisFloor = Math.min(slotsPerFloor, totalSlots - ((floor - 1) * slotsPerFloor));
+        
+        for (let i = 1; i <= slotsThisFloor; i++) {
+          const slotRef = doc(slotsRef);
+          const slotNumber = `${String.fromCharCode(64 + floor)}${i}`; // A1, A2, ..., B1, B2, etc.
+          
+          // Determine if this should be an electric slot
+          const isElectric = electricSlotsAssigned < electricSlots && 
+                           (slotCount % Math.ceil(totalSlots / electricSlots) === 0 || 
+                            electricSlots - electricSlotsAssigned >= totalSlots - slotCount + 1);
+          
+          if (isElectric) {
+            electricSlotsAssigned++;
+          }
+          
+          // Set slot type
+          const slotType = isElectric ? 'electric' : 'standard';
+          
+          batch.set(slotRef, {
+            id: slotRef.id,
+            locationId: locationRef.id,
+            locationName: newLocation.name,
+            number: slotNumber,
+            floor: floor,
+            type: slotType,
+            status: 'available',
+            pricePerHour: Number(newLocation.pricing_per_hour),
+            isAvailable: true,
+            isElectric: isElectric,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+            // Add more explicit type information
+            slotType: slotType, // Add this line to ensure type is properly set
+            slotNumber: slotNumber,
+            location_id: locationRef.id,
+            location_name: newLocation.name,
+            price_per_hour: Number(newLocation.pricing_per_hour),
+            is_available: true,
+            is_electric: isElectric // Add this line for explicit electric flag
+          });
+          
+          console.log(`Created slot:`, {
+            number: slotNumber,
+            type: slotType,
+            isElectric: isElectric,
+            floor: floor,
+            price: newLocation.pricing_per_hour
+          });
+          
+          slotCount++;
+        }
+      }
+      
+      await batch.commit();
+
+      // Reset form
       setNewLocation({
         name: '',
         address: '',
         total_slots: '',
-        pricing_per_hour: '',
+        electric_slots: '0',
+        pricing_per_hour: ''
       });
-      
+
       toast({
         title: 'Success',
-        description: `Location and ${totalSlots} parking slots created successfully!`,
+        description: `Location and ${totalSlots} slots created successfully!`,
       });
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error adding location:', error);
-      const errorMessage = error?.message || 'Failed to add location. Please try again.';
       toast({
         title: 'Error',
-        description: errorMessage.includes('permission') 
-          ? 'Permission denied. Please make sure you are logged in as admin.'
-          : errorMessage,
+        description: 'Failed to add location. Please try again.',
         variant: 'destructive',
       });
     }
@@ -186,32 +382,33 @@ const Admin = () => {
       name: location.name,
       address: location.address,
       total_slots: location.total_slots.toString(),
-      pricing_per_hour: location.pricing_per_hour.toString(),
+      electric_slots: (location as any).electric_slots?.toString() || '0',
+      pricing_per_hour: location.pricing_per_hour?.toString() || ''
     });
-    // Scroll to the form
-    document.getElementById('location-form')?.scrollIntoView({ behavior: 'smooth' });
   };
 
   const handleUpdateLocation = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingLocation) return;
-    
+
     try {
       await updateDoc(doc(db, 'locations', editingLocation.id), {
         name: newLocation.name,
         address: newLocation.address,
         total_slots: Number(newLocation.total_slots),
+        electric_slots: Number(newLocation.electric_slots),
         pricing_per_hour: Number(newLocation.pricing_per_hour),
       });
-      
+
       setEditingLocation(null);
       setNewLocation({
         name: '',
         address: '',
         total_slots: '',
-        pricing_per_hour: '',
+        electric_slots: '0',
+        pricing_per_hour: ''
       });
-      
+
       toast({
         title: 'Success',
         description: 'Location updated successfully!',
@@ -227,23 +424,21 @@ const Admin = () => {
   };
 
   const handleDeleteLocation = async (locationId: string) => {
-    if (!window.confirm('Are you sure you want to delete this location? This action cannot be undone.')) {
-      return;
-    }
-    
-    try {
-      await deleteDoc(doc(db, 'locations', locationId));
-      toast({
-        title: 'Success',
-        description: 'Location deleted successfully!',
-      });
-    } catch (error) {
-      console.error('Error deleting location:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to delete location. Please try again.',
-        variant: 'destructive',
-      });
+    if (window.confirm('Are you sure you want to delete this location? This action cannot be undone.')) {
+      try {
+        await deleteDoc(doc(db, 'locations', locationId));
+        toast({
+          title: 'Success',
+          description: 'Location deleted successfully!',
+        });
+      } catch (error) {
+        console.error('Error deleting location:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to delete location. Please try again.',
+          variant: 'destructive',
+        });
+      }
     }
   };
 
@@ -253,27 +448,53 @@ const Admin = () => {
       name: '',
       address: '',
       total_slots: '',
-      pricing_per_hour: '',
+      electric_slots: '0',
+      pricing_per_hour: ''
     });
   };
 
   const handleSignOut = async () => {
-    await signOut();
-    navigate('/');
+    try {
+      await signOut();
+      navigate('/login');
+    } catch (error) {
+      console.error('Error signing out:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to sign out. Please try again.',
+        variant: 'destructive',
+      });
+    }
   };
-
-  // Calculate total revenue from completed and active bookings
-  const totalRevenue = React.useMemo(() => {
-    return bookings
-      .filter(booking => booking.status === 'completed' || booking.status === 'active')
-      .reduce((sum, booking) => sum + (Number(booking.total_amount) || 0), 0);
-  }, [bookings]);
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
-      </div>
+      <PageLayout>
+        <div className="flex flex-col items-center justify-center min-h-[60vh] p-6">
+          <div className="animate-spin rounded-full h-16 w-16 border-4 border-primary border-t-transparent mb-4"></div>
+          <h2 className="text-xl font-semibold text-gray-800 mb-2">Loading Dashboard</h2>
+          <p className="text-gray-600 text-center max-w-md">
+            Fetching the latest booking data from our servers...
+          </p>
+        </div>
+      </PageLayout>
+    );
+  }
+
+  if (bookings.length === 0) {
+    return (
+      <PageLayout>
+        <div className="flex flex-col items-center justify-center min-h-[60vh] p-6">
+          <Calendar className="h-16 w-16 text-gray-400 mb-4" />
+          <h2 className="text-xl font-semibold text-gray-800 mb-2">No Bookings Yet</h2>
+          <p className="text-gray-600 text-center max-w-md mb-6">
+            Once users start making bookings, they'll appear here. The system is ready to receive new reservations.
+          </p>
+          <div className="bg-blue-50 text-blue-800 px-4 py-3 rounded-lg text-sm">
+            <p>ℹ️ Ensure your Firestore rules allow reading from the 'bookings' collection.</p>
+          </div>
+        </div>
+      </PageLayout>
     );
   }
 
@@ -288,9 +509,8 @@ const Admin = () => {
           </Button>
         </div>
 
-        {/* Stats Cards */}
+        {/* Stats Overview */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
-          {/* Total Locations Card */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Locations</CardTitle>
@@ -300,48 +520,37 @@ const Admin = () => {
               <div className="text-2xl font-bold">{locations.length}</div>
             </CardContent>
           </Card>
-
-          {/* Total Slots Card */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Slots</CardTitle>
-              <Car className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {locations.reduce((sum, loc) => sum + (loc.total_slots || 0), 0)}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Active Bookings Card */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active Bookings</CardTitle>
+              <CardTitle className="text-sm font-medium">Total Bookings</CardTitle>
               <Calendar className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
-                {bookings.filter(b => b.status === 'active').length}
-              </div>
+              <div className="text-2xl font-bold">{bookings.length}</div>
             </CardContent>
           </Card>
-
-          {/* Total Revenue Card */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
+              <div className="text-2xl font-bold">₹{totalRevenue.toFixed(2)}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Available Slots</CardTitle>
+              <Car className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
               <div className="text-2xl font-bold">
-                ₹{totalRevenue.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                {locations.reduce((sum, loc) => sum + (loc.available_slots || 0), 0)}
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Main Content */}
         <Tabs defaultValue="locations" className="space-y-6">
           <TabsList>
             <TabsTrigger value="locations">Locations</TabsTrigger>
@@ -356,85 +565,90 @@ const Admin = () => {
                   <Plus className="h-5 w-5 mr-2" />
                   {editingLocation ? 'Edit Location' : 'Add New Location'}
                 </CardTitle>
-                <CardDescription>
-                  Create a new parking location for users to book
-                </CardDescription>
               </CardHeader>
               <CardContent>
-                <form 
-                  id="location-form"
-                  onSubmit={editingLocation ? handleUpdateLocation : handleAddLocation} 
-                  className="w-full space-y-4"
-                >
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
+                <form onSubmit={editingLocation ? handleUpdateLocation : handleAddLocation} className="space-y-4">
+                  <div className="grid gap-4">
+                    <div className="grid gap-2">
                       <Label htmlFor="name">Location Name</Label>
                       <Input
                         id="name"
+                        placeholder="Enter location name"
                         value={newLocation.name}
                         onChange={(e) => setNewLocation({...newLocation, name: e.target.value})}
-                        placeholder="Downtown Parking Garage"
                         required
                       />
                     </div>
-                    <div>
+                    <div className="grid gap-2">
                       <Label htmlFor="address">Address</Label>
                       <Input
                         id="address"
+                        placeholder="Enter address"
                         value={newLocation.address}
                         onChange={(e) => setNewLocation({...newLocation, address: e.target.value})}
-                        placeholder="123 Main St, City, State"
                         required
                       />
                     </div>
-                    <div>
-                      <Label htmlFor="total_slots">Total Slots</Label>
-                      <Input
-                        id="total_slots"
-                        type="number"
-                        min="1"
-                        max="1000"
-                        value={newLocation.total_slots}
-                        onChange={(e) => setNewLocation({...newLocation, total_slots: e.target.value})}
-                        placeholder="10"
-                        required
-                      />
-                      <p className="text-xs text-muted-foreground mt-1">
-                        This many parking slots will be auto-generated (e.g., A1, A2, B1...)
-                      </p>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="slots">Total Slots</Label>
+                        <Input
+                          id="slots"
+                          type="number"
+                          placeholder="Number of slots"
+                          min="1"
+                          value={newLocation.total_slots}
+                          onChange={(e) => setNewLocation({...newLocation, total_slots: e.target.value})}
+                          required
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="electric_slots">Electric Slots</Label>
+                        <Input
+                          id="electric_slots"
+                          type="number"
+                          placeholder="Number of electric slots"
+                          min="0"
+                          max={newLocation.total_slots || '0'}
+                          value={newLocation.electric_slots}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            if (value === '' || (Number(value) >= 0 && Number(value) <= Number(newLocation.total_slots || 0))) {
+                              setNewLocation({...newLocation, electric_slots: value});
+                            }
+                          }}
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <Label htmlFor="pricing">Price per Hour (₹)</Label>
+                    <div className="grid gap-2">
+                      <Label htmlFor="price">Price per Hour ($)</Label>
                       <Input
-                        id="pricing"
+                        id="price"
                         type="number"
                         step="0.01"
+                        placeholder="0.00"
+                        min="0"
                         value={newLocation.pricing_per_hour}
                         onChange={(e) => setNewLocation({...newLocation, pricing_per_hour: e.target.value})}
-                        placeholder="5.00"
                         required
                       />
                     </div>
                   </div>
-                  <div className="flex space-x-2">
-                    <Button type="submit">
-                      {editingLocation ? 'Update Location' : 'Create Location'}
-                    </Button>
+                  <div className="flex justify-end space-x-2 pt-4">
                     {editingLocation && (
-                      <Button 
-                        type="button" 
-                        variant="outline"
-                        onClick={handleCancelEdit}
-                      >
+                      <Button type="button" variant="outline" onClick={handleCancelEdit}>
                         Cancel
                       </Button>
                     )}
+                    <Button type="submit">
+                      {editingLocation ? 'Update Location' : 'Add Location'}
+                    </Button>
                   </div>
                 </form>
               </CardContent>
             </Card>
 
-            {/* Locations Table */}
+            {/* Locations List */}
             <Card>
               <CardHeader>
                 <CardTitle>Parking Locations</CardTitle>
@@ -448,10 +662,9 @@ const Admin = () => {
                     <TableRow>
                       <TableHead>Name</TableHead>
                       <TableHead>Address</TableHead>
-                      <TableHead>Slots</TableHead>
-                      <TableHead>Price/Hour</TableHead>
-                      <TableHead>Created</TableHead>
-                      <TableHead>Actions</TableHead>
+                      <TableHead className="text-right">Slots</TableHead>
+                      <TableHead className="text-right">Price/Hour</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -459,28 +672,25 @@ const Admin = () => {
                       <TableRow key={location.id}>
                         <TableCell className="font-medium">{location.name}</TableCell>
                         <TableCell>{location.address}</TableCell>
-                        <TableCell>
-                          <Badge variant="secondary">
-                            {location.available_slots}/{location.total_slots}
-                          </Badge>
+                        <TableCell className="text-right">
+                          {location.available_slots} / {location.total_slots}
                         </TableCell>
-                        <TableCell>₹{location.pricing_per_hour}</TableCell>
-                        <TableCell>
-                          {new Date(location.created_at).toLocaleDateString()}
+                        <TableCell className="text-right">
+                          ₹{location.pricing_per_hour?.toFixed(2) || '0.00'}
                         </TableCell>
-                        <TableCell className="text-right space-x-1">
-                          <Button 
-                            variant="ghost" 
+                        <TableCell className="text-right space-x-2">
+                          <Button
+                            variant="ghost"
                             size="icon"
                             onClick={() => handleEditLocation(location)}
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="text-destructive hover:text-destructive"
+                          <Button
+                            variant="ghost"
+                            size="icon"
                             onClick={() => handleDeleteLocation(location.id)}
+                            className="text-red-600 hover:text-red-700"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -509,25 +719,34 @@ const Admin = () => {
                       <TableHead>Location</TableHead>
                       <TableHead>Start Time</TableHead>
                       <TableHead>End Time</TableHead>
-                      <TableHead>Amount</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
                       <TableHead>Status</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {bookings.map((booking) => (
                       <TableRow key={booking.id}>
-                        <TableCell>{booking.profiles?.full_name || 'Unknown'}</TableCell>
-                        <TableCell>{booking.locations?.name || 'Unknown'}</TableCell>
-                        <TableCell>
-                          {new Date(booking.start_time).toLocaleString()}
+                        <TableCell className="font-medium">
+                          {booking.user_name}
+                          <div className="text-sm text-muted-foreground">
+                            {booking.userEmail}
+                          </div>
+                        </TableCell>
+                        <TableCell>{booking.location_name}</TableCell>
+                        <TableCell>{booking.formatted_start_time}</TableCell>
+                        <TableCell>{booking.formatted_end_time}</TableCell>
+                        <TableCell className="text-right">
+                          ₹{booking.total_amount.toFixed(2)}
                         </TableCell>
                         <TableCell>
-                          {new Date(booking.end_time).toLocaleString()}
-                        </TableCell>
-                        <TableCell>${booking.total_amount}</TableCell>
-                        <TableCell>
-                          <Badge 
-                            variant={booking.status === 'active' ? 'default' : 'secondary'}
+                          <Badge
+                            variant={
+                              booking.status === 'completed'
+                                ? 'default'
+                                : booking.status === 'active'
+                                ? 'secondary'
+                                : 'outline'
+                            }
                           >
                             {booking.status}
                           </Badge>
@@ -543,6 +762,6 @@ const Admin = () => {
       </div>
     </PageLayout>
   );
-}
+};
 
 export default Admin;

@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import PageLayout from '@/components/layout/PageLayout';
 import { useToast } from '@/hooks/use-toast';
+import { BookingQRCode } from '@/components/BookingQRCode';
 import { 
   MapPin, 
   Clock, 
@@ -28,6 +29,7 @@ const BookingConfirmation = () => {
   const bookingData = location.state;
   const [paymentMethod, setPaymentMethod] = useState('card');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [bookingConfirmed, setBookingConfirmed] = useState(false);
 
   if (!bookingData) {
     const header = (
@@ -48,16 +50,27 @@ const BookingConfirmation = () => {
 
   const handleConfirmBooking = async () => {
     setIsProcessing(true);
-
-    // Simulate payment processing
-    setTimeout(() => {
-      setIsProcessing(false);
+    try {
+      // Simulate payment processing
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // Set booking as confirmed to show the QR code
+      setBookingConfirmed(true);
+      
       toast({
-        title: "Booking Confirmed!",
-        description: "Your parking spot has been successfully reserved.",
+        title: 'Booking Confirmed!',
+        description: 'Your parking spot has been successfully booked.',
       });
-      navigate('/bookings');
-    }, 2000);
+    } catch (error) {
+      console.error('Booking error:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to process your booking. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -77,15 +90,57 @@ const BookingConfirmation = () => {
     </>
   );
 
+  // Show QR code if booking is confirmed
+  if (bookingConfirmed) {
+    return (
+      <PageLayout className="max-w-4xl mx-auto">
+        <div className="flex flex-col items-center space-y-6">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-foreground mb-2">Booking Confirmed!</h1>
+            <p className="text-muted-foreground">Your parking spot is reserved. Show this QR code at the entrance.</p>
+          </div>
+          
+          <BookingQRCode
+            bookingId={bookingData.bookingId || `temp-${Date.now()}`}
+            bookingData={{
+              locationName: bookingData.locationName,
+              slotNumber: bookingData.slotNumber,
+              startTime: bookingData.startTime,
+              endTime: bookingData.endTime,
+              vehicleNumber: bookingData.vehicleNumber || 'Not specified',
+            }}
+          />
+          
+          <div className="flex flex-col sm:flex-row gap-4 w-full max-w-md">
+            <Button 
+              variant="outline" 
+              className="w-full"
+              onClick={() => navigate('/bookings')}
+            >
+              View My Bookings
+            </Button>
+            <Button 
+              className="w-full"
+              onClick={() => navigate('/')}
+            >
+              Back to Home
+            </Button>
+          </div>
+        </div>
+      </PageLayout>
+    );
+  }
+
+  // Show payment form if booking is not confirmed yet
   return (
-    <PageLayout header={header}>
-      <div className="py-4">
-        {/* Header */}
-        <div className="mb-8">
+    <PageLayout className="max-w-4xl mx-auto">
+      <div className="flex flex-col space-y-6">
+        <div className="flex items-center space-x-2">
           <Button 
             variant="ghost" 
+            size="icon" 
             onClick={() => navigate(-1)}
-            className="mb-4"
+            className="h-8 w-8"
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back

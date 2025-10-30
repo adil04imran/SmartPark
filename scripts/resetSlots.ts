@@ -14,6 +14,7 @@ async function deleteAllSlots() {
   } catch (error) {
     console.error('Error deleting slots:', error);
     throw error;
+    
   }
 }
 

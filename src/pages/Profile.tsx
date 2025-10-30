@@ -25,7 +25,8 @@ import {
   Shield,
   CreditCard,
   Smartphone,
-  Edit
+  Edit,
+  RefreshCw
 } from 'lucide-react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { updateProfile } from 'firebase/auth';
@@ -233,34 +234,35 @@ const Profile = () => {
           <TabsContent value="profile" className="mt-6">
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <div className="flex items-center justify-between">
-                    <h1 className="text-2xl font-bold">Profile</h1>
-                    <div className="flex items-center space-x-2">
-                      {isGoogleUser && !isEditing && (
-                        <Button 
-                          variant="outline" 
-                          onClick={handleGoogleProfileUpdate}
-                          disabled={isUpdating}
-                        >
-                          {isUpdating ? 'Updating...' : 'Refresh Google Profile'}
+                <CardTitle className="flex items-center justify-between w-full">
+                  <h1 className="text-2xl font-bold">Profile</h1>
+                  <div className="flex items-center space-x-3">
+                    {isGoogleUser && !isEditing && (
+                      <Button 
+                        variant="outline" 
+                        size="icon"
+                        onClick={handleGoogleProfileUpdate}
+                        disabled={isUpdating}
+                        title="Refresh Google Profile"
+                      >
+                        <RefreshCw className={`h-4 w-4 ${isUpdating ? 'animate-spin' : ''}`} />
+                      </Button>
+                    )}
+                    
+                    {isEditing ? (
+                      <>
+                        <Button variant="outline" onClick={() => setIsEditing(false)} disabled={isUpdating}>
+                          Cancel
                         </Button>
-                      )}
-                      {isEditing ? (
-                        <>
-                          <Button variant="outline" onClick={() => setIsEditing(false)} disabled={isUpdating}>
-                            Cancel
-                          </Button>
-                          <Button onClick={handleSaveProfile} disabled={isUpdating}>
-                            {isUpdating ? 'Saving...' : 'Save Changes'}
-                          </Button>
-                        </>
-                      ) : (
-                        <Button onClick={() => setIsEditing(true)}>
-                          Edit Profile
+                        <Button onClick={handleSaveProfile} disabled={isUpdating}>
+                          {isUpdating ? 'Saving...' : 'Save Changes'}
                         </Button>
-                      )}
-                    </div>
+                      </>
+                    ) : (
+                      <Button onClick={() => setIsEditing(true)}>
+                        Edit Profile
+                      </Button>
+                    )}
                   </div>
                 </CardTitle>
               </CardHeader>

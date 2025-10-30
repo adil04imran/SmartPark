@@ -149,8 +149,8 @@ const Register = () => {
   );
 
   return (
-    <PageLayout className="flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <Card className="w-full max-w-md mx-auto shadow-lg border-0">
+    <PageLayout className="flex items-center justify-center bg-white p-4">
+      <Card className="w-full max-w-md mx-auto shadow-md border">
         <CardHeader className="text-center space-y-2">
           {header}
         </CardHeader>

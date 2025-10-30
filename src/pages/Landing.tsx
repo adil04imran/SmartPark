@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { ScrollIndicator } from '@/components/ui/ScrollIndicator';
 import PageLayout from '@/components/layout/PageLayout';
+import { useAuth } from '@/contexts/AuthContext';
 import { 
   Car,
   MapPin,
@@ -21,6 +22,7 @@ import {
 
 const Landing = () => {
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
 
   const features = [
     {
@@ -308,7 +310,8 @@ const Landing = () => {
           </div>
         </section>
 
-        {/* CTA Section */}
+        {/* CTA Section - Only show for non-logged in users */}
+        {!currentUser && (
         <footer className="relative bg-white py-12 md:py-16 lg:py-20 px-4 sm:px-5 text-center font-sans overflow-hidden">
           <div className="max-w-4xl mx-auto">
             <h2 className="text-2xl sm:text-3xl md:text-4xl font-semibold mb-3 md:mb-4 text-gray-900 px-4">
@@ -347,11 +350,10 @@ const Landing = () => {
             </div>
             
             <div className="text-sm text-gray-400">
-              © {new Date().getFullYear()} SmartParking. All rights reserved.
+              {new Date().getFullYear()} SmartParking. All rights reserved.
             </div>
           </div>
           
-          {/* Animated Bubbles */}
           {[
             { size: 'w-10 h-10', left: '10%', delay: 0 },
             { size: 'w-6 h-6', left: '30%', delay: 2 },
@@ -400,6 +402,7 @@ const Landing = () => {
             `
           }} />
         </footer>
+        )}
       </div>
     </PageLayout>
   );
